@@ -127,7 +127,7 @@ async function uploadMedia(){
   if(!files.length) return toast('Choose photos or videos first.');
   $('#mediaStatus').textContent=`Uploading ${files.length} file(s)...`;
   let ok=0, failed=0;
-  for(const f of files){
+  const uploadBatch=files.map(async (f)=>{
     const isVideo=f.type.startsWith('video/');
     const isImage=f.type.startsWith('image/');
     if(!isVideo && !isImage){ failed++; continue; }
@@ -152,7 +152,8 @@ async function uploadMedia(){
     }
     await dbInsert('photos',{id:uid(),album_id,owner_id:APP.profile.id,name:f.name,type:f.type,media_kind:kind,storage_path,url,data_url,created_at:now()});
     ok++;
-  }
+});
+  await Promise.all(uploadBatch);
   input.value='';
   await loadAll();
   renderAll();
@@ -317,3 +318,5 @@ function handleNotification(payload){ if(!APP.profile || Notification?.permissio
 function setupInstallPrompt(){ let promptEvent=null; const standalone=matchMedia('(display-mode: standalone)').matches || navigator.standalone; if(standalone)return; window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;$('#installBanner').classList.remove('hidden')}); $('#installBtn').onclick=async()=>{ if(promptEvent){promptEvent.prompt(); await promptEvent.userChoice; $('#installBanner').classList.add('hidden');} else toast('On iPhone/iPad: tap Share, then Add to Home Screen. On Android: use the browser menu, then Install/Add to Home screen.'); }; $('#dismissInstall').onclick=()=>$('#installBanner').classList.add('hidden'); setTimeout(()=>$('#installBanner').classList.remove('hidden'),800); }
 function exportBackup(){ const data={profile:APP.profile,partners:APP.partners,links:APP.links,moods:APP.moods,notes:APP.notes,activities:APP.activities,albums:APP.albums,photos:APP.photos,recordings:APP.recordings,messages:APP.messages}; const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})); a.download='couples-connect-backup.json'; a.click(); }
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+// Updated: direct storage uploads, gallery/location hooks.
