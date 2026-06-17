@@ -23,22 +23,7 @@
   </div>
 
   <main class="app-shell">
-    <section id="configScreen" class="screen active">
-      <div class="card hero-card">
-        <h1>Couples Connect</h1>
-        <p>A private long-distance dashboard for profiles, linked partners, moods, notes, albums, calls, and shared memories.</p>
-      </div>
-      <div class="card">
-        <h2>Cloud sync setup</h2>
-        <p class="muted">For real-time syncing across devices, paste your Supabase project URL and anon key. You only do this once per browser.</p>
-        <label>Supabase URL<input id="supabaseUrl" placeholder="https://cmdylttzutpbaovxcfll.supabase.co" /></label>
-        <label>Supabase anon key<textarea id="supabaseKey" rows="3" placeholder="sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc" ></textarea></label>
-        <button id="saveConfigBtn">Save and continue</button>
-        <button id="demoModeBtn" class="secondary">Continue local-only demo</button>
-      </div>
-    </section>
-
-    <section id="profileScreen" class="screen">
+    <section id="profileScreen" class="screen active">
       <div class="card">
         <h1>Create your profile</h1>
         <p class="muted">Five compact questions build enough background for a useful relationship profile.</p>
@@ -173,6 +158,10 @@
       </section>
     </section>
   </main>
+  <script>
+    window.SUPABASE_URL = "https://cmdylttzutpbaovxcfll.supabase.co";
+    window.SUPABASE_ANON_KEY = "sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc";
+  </script>
   <script src="app.js"></script>
 </body>
 </html>

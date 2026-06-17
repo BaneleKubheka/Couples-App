@@ -44,8 +44,7 @@ For large albums and many recordings, do not store files directly in database ro
 3. Run the SQL in `supabase-schema.sql`.
 4. Go to Project Settings > API.
 5. Copy the Project URL and anon public key.
-6. Open the deployed app.
-7. Paste those values on the first screen.
+6. The supplied `index.html` already has the Supabase URL and publishable key embedded, so users will not be asked for backend details on launch.
 
 ## How linking works
 
@@ -71,3 +70,15 @@ For a serious public app, add:
 - A recording indicator visible to every participant.
 - Push notifications.
 - Encrypted messages and private media storage.
+
+
+## Embedded Supabase configuration
+
+This build has the Supabase Project URL and publishable key embedded directly in `index.html`, using:
+
+```js
+window.SUPABASE_URL = "https://cmdylttzutpbaovxcfll.supabase.co";
+window.SUPABASE_ANON_KEY = "sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc";
+```
+
+The previous cloud setup screen has been removed. The app now launches directly to the profile setup screen, or to the saved active profile if one already exists in that browser.

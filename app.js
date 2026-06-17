@@ -15,16 +15,31 @@ const toast = msg => alert(msg);
 window.addEventListener('load', init);
 async function init(){
   if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-  setupInstallPrompt(); bindUI();
-  const cfg = getLS('cc_config');
-  if(cfg?.url && cfg?.key) { $('#supabaseUrl').value=cfg.url; $('#supabaseKey').value=cfg.key; await connectSupabase(cfg.url,cfg.key); }
+  setupInstallPrompt();
+  bindUI();
+
+  const url = window.SUPABASE_URL;
+  const key = window.SUPABASE_ANON_KEY;
+
+  if(url && key) {
+    await connectSupabase(url, key);
+  } else {
+    toast('Supabase URL/key are missing in index.html. Local-only mode will be used.');
+  }
+
   const profile = getLS('cc_active_profile');
-  if(APP.sb && profile) await loadProfile(profile.id); else if(profile){ APP.profile=profile; show('appScreen'); renderAll(); } else show(APP.sb?'profileScreen':'configScreen');
+  if(APP.sb && profile) {
+    await loadProfile(profile.id);
+  } else if(profile) {
+    APP.profile = profile;
+    show('appScreen');
+    renderAll();
+  } else {
+    show('profileScreen');
+  }
 }
 function show(id){ $$('.screen').forEach(x=>x.classList.remove('active')); $('#'+id).classList.add('active'); }
 function bindUI(){
-  $('#saveConfigBtn').onclick=async()=>{const url=$('#supabaseUrl').value.trim(), key=$('#supabaseKey').value.trim(); if(!url||!key)return toast('Paste both Supabase values.'); saveLS('cc_config',{url,key}); await connectSupabase(url,key); show('profileScreen');};
-  $('#demoModeBtn').onclick=()=>show('profileScreen');
   $('#createProfileBtn').onclick=createProfile;
   $('#logoutBtn').onclick=()=>{localStorage.removeItem('cc_active_profile'); location.reload();};
   $$('.tab').forEach(b=>b.onclick=()=>{ $$('.tab,.tab-panel').forEach(x=>x.classList.remove('active')); b.classList.add('active'); $('#'+b.dataset.tab).classList.add('active'); renderAll(); });
@@ -37,7 +52,7 @@ function bindUI(){
   $('#exportBtn').onclick=exportBackup; $('#clearLocalBtn').onclick=()=>{if(confirm('Clear local app data on this browser?')){localStorage.clear();location.reload();}};
 }
 async function connectSupabase(url,key){
-  try{ APP.sb = supabase.createClient(url,key,{realtime:{params:{eventsPerSecond:10}}}); await loadAll(); subscribeRealtime(); return true; }
+  try{ APP.sb = window.supabase.createClient(url,key,{realtime:{params:{eventsPerSecond:10}}}); await loadAll(); subscribeRealtime(); return true; }
   catch(e){ console.error(e); toast('Could not connect to Supabase. Local-only mode still works.'); return false; }
 }
 async function dbInsert(table,row){ if(APP.sb){ const {error}=await APP.sb.from(table).insert(row); if(error) throw error; } else { const a=getLS('cc_'+table,[]); a.push(row); saveLS('cc_'+table,a); await loadAll(); } }
