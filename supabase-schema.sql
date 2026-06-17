@@ -181,3 +181,31 @@ do $$ begin create policy "public storage read" on storage.objects for select us
 do $$ begin create policy "public storage insert" on storage.objects for insert with check (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
 do $$ begin create policy "public storage update" on storage.objects for update using (bucket_id = 'couples-media') with check (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
 do $$ begin create policy "public storage delete" on storage.objects for delete using (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
+-- Gallery/location update additions. Safe to run on an existing project.
+alter table photos add column if not exists size_bytes bigint;
+alter table photos add column if not exists updated_at timestamptz default now();
+
+create table if not exists location_shares (
+  id uuid primary key,
+  profile_id uuid not null references profiles(id) on delete cascade,
+  latitude double precision not null,
+  longitude double precision not null,
+  accuracy double precision,
+  share_mode text not null default 'snapshot' check (share_mode in ('snapshot','live')),
+  is_live boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table location_shares replica identity full;
+alter table location_shares enable row level security;
+
+do $$ begin alter publication supabase_realtime add table location_shares; exception when duplicate_object then null; end $$;
+do $$ begin create policy "public all location_shares" on location_shares for all using (true) with check (true); exception when duplicate_object then null; end $$;
+
+-- Ensure Storage bucket exists and accepts raw image/video/call recording uploads.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('couples-media', 'couples-media', true, 524288000, array['image/*','video/*','audio/*','application/octet-stream'])
+on conflict (id) do update set public = true, file_size_limit = 524288000, allowed_mime_types = array['image/*','video/*','audio/*','application/octet-stream'];
+
+notify pgrst, 'reload schema';
