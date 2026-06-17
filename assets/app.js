@@ -1,7 +1,8 @@
+console.log('Couples Connect app version: signin-robust-20260617-14');
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
-const CACHE_VERSION = 'gallery-location-20260617-11-syntax-signinfix';
+const CACHE_VERSION = 'signin-robust-20260617-14';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
@@ -29,6 +30,23 @@ const saveLS = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
 const getLS = (k,d=null)=>{ try { const v=JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const toast = m => alert(m);
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+// Robust click fallback: runs even if normal startup binding is interrupted by cache/CDN/runtime issues.
+document.addEventListener('click', function(e){
+  const btn = e.target.closest && e.target.closest('#loginBtn,#createProfileBtn,#recoverLocalBtn');
+  if(!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  if(btn.id === 'loginBtn') loginProfile();
+  if(btn.id === 'createProfileBtn') createProfile();
+  if(btn.id === 'recoverLocalBtn') {
+    const p=getLS('cc_active_profile');
+    if(p?.id) loadProfile(p.id,p.passcodeHash,true);
+    else setAuthStatus('No saved profile on this browser.');
+  }
+}, true);
+
 
 window.addEventListener('load', init);
 
@@ -134,12 +152,28 @@ async function backgroundRefresh(){
   try { await loadAll(); renderAll(); } catch(e) { console.warn('Background refresh failed:', e); }
 }
 
+
+async function ensureCloudReady(){
+  if(APP.sb) return true;
+  try{
+    if(!window.supabase) throw new Error('Supabase library did not load. Check internet access or CDN blocking.');
+    APP.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { realtime:{ params:{ eventsPerSecond:10 } } });
+    await loadAll();
+    subscribeRealtime();
+    return true;
+  }catch(e){
+    console.error('Cloud init failed:', e);
+    setAuthStatus('Cloud connection failed: ' + friendlySupabaseError(e));
+    return false;
+  }
+}
+
 async function createProfile(){
   const btn=$('#createProfileBtn');
   const name=$('#qName').value.trim(), pass=$('#qPasscode').value.trim();
   if(!name||!pass) return setAuthStatus('Enter a name and recovery passcode.');
   if(pass.length < 4) return setAuthStatus('Use a recovery passcode with at least 4 characters.');
-  if(!APP.sb) return setAuthStatus('Cloud connection is not ready. Refresh once, then try again.');
+  if(!await ensureCloudReady()) return;
   btn.disabled=true; btn.textContent='Creating cloud profile...'; setAuthStatus('Creating profile in Supabase...');
   try {
     const passcode_hash=await sha256(pass);
@@ -158,7 +192,7 @@ async function loginProfile(){
   const id=$('#loginProfileId')?.value.trim();
   const pass=$('#loginPasscode')?.value.trim();
   if(!id||!pass) return setAuthStatus('Enter profile code and passcode.');
-  if(!APP.sb) return setAuthStatus('Cloud connection is not ready. Refresh the page and check your internet connection.');
+  if(!await ensureCloudReady()) return;
   try{
     if(btn){ btn.disabled=true; btn.textContent='Signing in...'; }
     setAuthStatus('Signing in...');
@@ -312,9 +346,9 @@ function renderGalleryModal(){
   const p=APP.galleryItems[APP.galleryIndex]; if(!p)return;
   const src=p.url||p.data_url||''; const kind=kindOf(p); const ownAlbums=APP.albums.filter(a=>a.owner_id===APP.profile.id); const canEdit=p.owner_id===APP.profile.id;
   const albumOptions=ownAlbums.map(a=>`<option value="${a.id}" ${a.id===p.album_id?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
-  $('#galleryTitle').textContent=p.name||'Media';
-  $('#galleryCounter').textContent=`${APP.galleryIndex+1} / ${APP.galleryItems.length}`;
-  $('#galleryBody').innerHTML=kind==='video' ? `<video class="gallery-media" src="${src}" controls autoplay playsinline></video>` : `<img class="gallery-media" src="${src}" alt="${escapeHtml(p.name||'media')}">`;
+  const gt=$('#galleryTitle'); if(gt) gt.textContent=p.name||'Media';
+  const gc=$('#galleryCounter'); if(gc) gc.textContent=`${APP.galleryIndex+1} / ${APP.galleryItems.length}`;
+  const gb=$('#galleryBody'); if(!gb) return; gb.innerHTML=kind==='video' ? `<video class="gallery-media" src="${src}" controls autoplay playsinline></video>` : `<img class="gallery-media" src="${src}" alt="${escapeHtml(p.name||'media')}">`;
   $('#galleryMeta').innerHTML=`<p>${escapeHtml(p.name||'media')}<br><small>${escapeHtml(p.type||kind)} ${p.size_bytes?`• ${formatBytes(p.size_bytes)}`:''}</small></p>
     <div class="gallery-actions"><a class="buttonlike" href="${src}" download="${escapeHtml(p.name||'media')}">Download</a>
     ${canEdit?`<select id="galleryMoveSelect">${albumOptions}</select><button class="secondary" onclick="moveMediaFromGallery('${p.id}')">Move</button><button class="danger" onclick="deleteMediaFromGallery('${p.id}')">Delete</button>`:''}</div>`;
