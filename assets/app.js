@@ -7,7 +7,7 @@ const TURN_ICE_SERVERS = [
   // { urls: 'turn:your-turn-domain:3478', username: 'user', credential: 'password' }
 ];
 
-const APP = { sb:null, profile:null, selectedMood:'😊', profiles:[], partners:[], links:[], moods:[], notes:[], activities:[], albums:[], photos:[], recordings:[], messages:[], calls:[], realtimeChannels:[], localStream:null, remoteStream:null, peer:null, recorder:null, recordedChunks:[], currentCallId:null };
+const APP = { sb:null, profile:null, selectedMood:'😊', profiles:[], partners:[], links:[], moods:[], notes:[], activities:[], albums:[], photos:[], recordings:[], messages:[], calls:[], realtimeChannels:[], localStream:null, remoteStream:null, peer:null, recorder:null, recordedChunks:[], currentCallId:null, recordingCanvas:null, recordingAudioContext:null, recordingAnimation:null };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
@@ -19,7 +19,7 @@ const toast = m => alert(m);
 window.addEventListener('load', init);
 async function init(){
   try { await clearOldAppCachesSafely(); } catch(e) { console.warn('Cache clear skipped:', e); }
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=full-20260617-3').catch(()=>{});
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=full-20260617-5').catch(()=>{});
   setupInstallPrompt();
   bindUI();
   try {
@@ -39,7 +39,7 @@ async function init(){
 async function clearOldAppCachesSafely(){
   if(!('caches' in window)) return;
   const keys = await caches.keys();
-  await Promise.all(keys.filter(k=>!k.includes('full-20260617-3')).map(k=>caches.delete(k)));
+  await Promise.all(keys.filter(k=>!k.includes('full-20260617-5')).map(k=>caches.delete(k)));
 }
 function show(id){ $$('.screen').forEach(x=>x.classList.remove('active')); $('#'+id)?.classList.add('active'); }
 function bindUI(){
@@ -50,7 +50,7 @@ function bindUI(){
   $('#moodButtons .mood')?.classList.add('active');
   $('#saveMoodBtn').onclick=saveMood; $('#saveNoteBtn').onclick=saveNote; $('#saveProfileBtn').onclick=saveProfileEdits;
   $('#addPartnerBtn').onclick=addPartner; $('#linkPartnerBtn').onclick=linkPartner;
-  $('#createAlbumBtn').onclick=createAlbum; $('#uploadPhotosBtn').onclick=uploadPhotos;
+  $('#createAlbumBtn').onclick=createAlbum; $('#uploadMediaBtn').onclick=uploadMedia;
   $$('.quick-actions button').forEach(b=>b.onclick=()=>postActivity(b.dataset.prompt));
   $('#sendMessageBtn').onclick=sendEncryptedMessage; $('#enableNotificationsBtn').onclick=enableNotifications;
   $('#startCallBtn').onclick=startCall; $('#joinCallBtn').onclick=joinLatestCall; $('#recordCallBtn').onclick=toggleRecording; $('#hangupBtn').onclick=hangup;
@@ -61,6 +61,8 @@ function friendlySupabaseError(e){ const msg=(e?.message||String(e)); if(msg.inc
 async function sha256(text){ const data=new TextEncoder().encode(text); const hash=await crypto.subtle.digest('SHA-256',data); return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
 async function dbInsert(table,row){ if(!APP.sb) throw new Error('Supabase is not connected.'); const {error}=await APP.sb.from(table).insert(row); if(error) throw error; }
 async function dbUpsert(table,row){ if(!APP.sb) throw new Error('Supabase is not connected.'); const {error}=await APP.sb.from(table).upsert(row); if(error) throw error; }
+async function dbDelete(table,id,ownerField=null){ if(!APP.sb) throw new Error('Supabase is not connected.'); let q=APP.sb.from(table).delete().eq('id',id); if(ownerField) q=q.eq(ownerField,APP.profile.id); const {error}=await q; if(error) throw error; }
+async function dbUpdate(table,id,row,ownerField=null){ if(!APP.sb) throw new Error('Supabase is not connected.'); let q=APP.sb.from(table).update(row).eq('id',id); if(ownerField) q=q.eq(ownerField,APP.profile.id); const {error}=await q; if(error) throw error; }
 async function loadTable(t){ if(!APP.sb){ APP[t]=[]; return; } const {data,error}=await APP.sb.from(t).select('*').order('created_at',{ascending:false}); if(error){ console.warn('Could not load '+t, error); APP[t]=APP[t]||[]; return; } APP[t]=data||[]; }
 async function loadAll(){ for(const t of ['profiles','partners','links','moods','notes','activities','albums','photos','recordings','messages','calls']) await loadTable(t); }
 function subscribeRealtime(){
@@ -117,15 +119,44 @@ async function createAlbum(){
   catch(e){ console.error(e); $('#albumStatus').textContent='Album failed: '+e.message; toast('Album creation failed. Run the latest supabase-schema.sql first.'); }
 }
 async function fileToDataUrl(file){ return new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file);}); }
-async function uploadPhotos(){
-  const album_id=$('#albumSelect').value; if(!album_id)return toast('Create or select an album first.'); const files=[...$('#photoInput').files]; if(!files.length)return toast('Choose photos first.');
-  for(const f of files){ const path=`${APP.profile.id}/${album_id}/${Date.now()}-${f.name.replace(/[^a-z0-9_.-]/gi,'_')}`; let url=null, data_url=null;
-    const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,f,{upsert:false,contentType:f.type});
-    if(!up.error){ url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl; }
-    else { console.warn('Storage upload failed, saving fallback base64:', up.error); data_url=await fileToDataUrl(f); }
-    await dbInsert('photos',{id:uid(),album_id,owner_id:APP.profile.id,name:f.name,type:f.type,storage_path:url?path:null,url,data_url,created_at:now()});
+async function uploadMedia(){
+  const album_id=$('#albumSelect').value;
+  if(!album_id) return toast('Create or select an album first.');
+  const input=$('#mediaInput');
+  const files=[...input.files];
+  if(!files.length) return toast('Choose photos or videos first.');
+  $('#mediaStatus').textContent=`Uploading ${files.length} file(s)...`;
+  let ok=0, failed=0;
+  for(const f of files){
+    const isVideo=f.type.startsWith('video/');
+    const isImage=f.type.startsWith('image/');
+    if(!isVideo && !isImage){ failed++; continue; }
+    const kind=isVideo?'video':'image';
+    const safe=f.name.replace(/[^a-z0-9_.-]/gi,'_');
+    const path=`${APP.profile.id}/${album_id}/${kind}s/${Date.now()}-${safe}`;
+    let url=null, data_url=null, storage_path=null;
+    try{
+      const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,f,{upsert:false,contentType:f.type || (isVideo?'video/mp4':'image/jpeg')});
+      if(up.error) throw up.error;
+      storage_path=path;
+      url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+    }catch(e){
+      console.warn('Storage upload failed:', e);
+      if(f.size <= 4 * 1024 * 1024){
+        data_url=await fileToDataUrl(f);
+      } else {
+        failed++;
+        $('#mediaStatus').textContent=`Some uploads failed. Large files require Supabase Storage policy/bucket to be working. Last error: ${e.message || e}`;
+        continue;
+      }
+    }
+    await dbInsert('photos',{id:uid(),album_id,owner_id:APP.profile.id,name:f.name,type:f.type,media_kind:kind,storage_path,url,data_url,created_at:now()});
+    ok++;
   }
-  $('#photoInput').value=''; await loadAll(); renderAll();
+  input.value='';
+  await loadAll();
+  renderAll();
+  $('#mediaStatus').textContent=`Upload complete. ${ok} saved${failed?`, ${failed} failed`:''}.`;
 }
 async function keyFromPhrase(phrase){ const keymat=await crypto.subtle.importKey('raw',new TextEncoder().encode(phrase),'PBKDF2',false,['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2',salt:new TextEncoder().encode('couples-connect-v1'),iterations:120000,hash:'SHA-256'},keymat,{name:'AES-GCM',length:256},false,['encrypt','decrypt']); }
 async function encryptText(text,phrase){ const iv=crypto.getRandomValues(new Uint8Array(12)); const key=await keyFromPhrase(phrase); const buf=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(text)); return {cipher:btoa(String.fromCharCode(...new Uint8Array(buf))),iv:btoa(String.fromCharCode(...iv))}; }
@@ -137,7 +168,85 @@ function fillProfileEdit(){ $('#editName').value=APP.profile.name||''; $('#editB
 function renderFeeds(){ const ids=visibleProfileIds(); $('#moodFeed').innerHTML=APP.moods.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${x.mood} ${escapeHtml(nameOf(x.profile_id))}</strong><br>${escapeHtml(x.note||'Checked in')}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No moods yet.</p>'; $('#notesFeed').innerHTML=APP.notes.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${escapeHtml(nameOf(x.profile_id))}</strong><br>${escapeHtml(x.body)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'; $('#activityFeed').innerHTML=APP.activities.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${escapeHtml(nameOf(x.profile_id))}</strong>: ${escapeHtml(x.body)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No activity yet.</p>'; }
 function renderProfiles(){ const ids=visibleProfileIds(); $('#publicProfiles').innerHTML=APP.profiles.filter(p=>ids.includes(p.id)).map(p=>`<div class="partner-card"><h3>${escapeHtml(p.name)}</h3><p><b>Basics:</b> ${escapeHtml(p.basics||'')}</p><p><b>Personality:</b> ${escapeHtml(p.personality||'')}</p><p><b>Needs:</b> ${escapeHtml(p.needs||'')}</p><p><b>Life:</b> ${escapeHtml(p.life||'')}</p></div>`).join(''); }
 function renderPartners(){ const privateCards=APP.partners.filter(p=>p.owner_id===APP.profile.id).map(p=>`<div class="partner-card"><h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.notes||'')}</p><small>Private card</small></div>`).join(''); const linked=linkedIds().map(id=>`<div class="partner-card"><h3>${escapeHtml(nameOf(id))}</h3><p>Linked cloud profile</p><small>${id}</small></div>`).join(''); $('#partnerList').innerHTML=privateCards+linked || '<p class="muted">No partners yet.</p>'; }
-function renderAlbums(){ const ids=visibleProfileIds(); const visible=APP.albums.filter(a=>a.owner_id===APP.profile.id || (a.visibility==='shared' && ids.includes(a.owner_id))); $('#albumSelect').innerHTML=visible.map(a=>`<option value="${a.id}">${escapeHtml(a.name)} (${a.visibility})</option>`).join(''); $('#albumGrid').innerHTML=visible.map(a=>{ const ps=APP.photos.filter(p=>p.album_id===a.id); return `<div class="album-card"><h3>${escapeHtml(a.name)}</h3><p class="muted">${a.visibility} • ${escapeHtml(nameOf(a.owner_id))}</p><div class="photo-grid">${ps.map(p=>`<a href="${p.url||p.data_url}" download="${escapeHtml(p.name)}"><img src="${p.url||p.data_url}" alt="${escapeHtml(p.name)}"></a>`).join('')}</div></div>`; }).join('') || '<p class="muted">No albums yet.</p>'; }
+function renderAlbums(){
+  const ids=visibleProfileIds();
+  const visible=APP.albums.filter(a=>a.owner_id===APP.profile.id || (a.visibility==='shared' && ids.includes(a.owner_id)));
+  const ownAlbums=APP.albums.filter(a=>a.owner_id===APP.profile.id);
+  $('#albumSelect').innerHTML=ownAlbums.map(a=>`<option value="${a.id}">${escapeHtml(a.name)} (${a.visibility})</option>`).join('');
+  $('#albumGrid').innerHTML=visible.map(a=>{
+    const ps=APP.photos.filter(p=>p.album_id===a.id);
+    const tiles=ps.map(p=>mediaTile(p, ownAlbums)).join('');
+    const canEdit=a.owner_id===APP.profile.id;
+    const albumActions=canEdit ? `<div class="album-actions"><button class="ghost small" onclick="renameAlbum('${a.id}')">Rename</button><button class="danger small" onclick="deleteAlbum('${a.id}')">Delete album</button></div>` : '';
+    return `<div class="album-card"><h3>${escapeHtml(a.name)}</h3><p class="muted">${a.visibility} • ${escapeHtml(nameOf(a.owner_id))} • ${ps.length} item(s)</p>${albumActions}<div class="media-grid">${tiles}</div></div>`;
+  }).join('') || '<p class="muted">No albums yet.</p>';
+}
+function mediaTile(p, ownAlbums=[]){
+  const src=p.url||p.data_url||'';
+  const name=escapeHtml(p.name||'media');
+  const type=p.type||'';
+  const kind=p.media_kind || (type.startsWith('video/')?'video':'image');
+  const canEdit=p.owner_id===APP.profile?.id;
+  const albumOptions=ownAlbums.map(a=>`<option value="${a.id}" ${a.id===p.album_id?'selected':''}>${escapeHtml(a.name)}</option>`).join('');
+  const editControls=canEdit ? `<div class="media-actions"><select id="move-${p.id}">${albumOptions}</select><button class="secondary small" onclick="moveMedia('${p.id}')">Move</button><button class="danger small" onclick="deleteMedia('${p.id}')">Delete</button></div>` : '';
+  if(kind==='video'){
+    return `<div class="media-tile"><video src="${src}" controls playsinline preload="metadata"></video><a href="${src}" download="${name}">Download video</a><small>${name}</small>${editControls}</div>`;
+  }
+  return `<div class="media-tile"><a href="${src}" download="${name}"><img src="${src}" alt="${name}"></a><a href="${src}" download="${name}">Download photo</a><small>${name}</small>${editControls}</div>`;
+}
+async function renameAlbum(albumId){
+  const album=APP.albums.find(a=>a.id===albumId && a.owner_id===APP.profile.id);
+  if(!album) return toast('You can only rename your own albums.');
+  const name=prompt('New album name:', album.name);
+  if(!name || !name.trim()) return;
+  await dbUpdate('albums', album.id, {name:name.trim()}, 'owner_id');
+  await loadAll(); renderAll();
+}
+async function deleteAlbum(albumId){
+  const album=APP.albums.find(a=>a.id===albumId && a.owner_id===APP.profile.id);
+  if(!album) return toast('You can only delete your own albums.');
+  const media=APP.photos.filter(p=>p.album_id===album.id);
+  if(!confirm(`Delete album "${album.name}" and ${media.length} media item(s)? This cannot be undone.`)) return;
+  try{
+    const paths=media.map(p=>p.storage_path).filter(Boolean);
+    if(paths.length) await APP.sb.storage.from(MEDIA_BUCKET).remove(paths);
+    await dbDelete('albums', album.id, 'owner_id');
+    await loadAll(); renderAll();
+    toast('Album deleted.');
+  }catch(e){ console.error(e); toast('Album delete failed: '+friendlySupabaseError(e)); }
+}
+async function deleteMedia(mediaId){
+  const media=APP.photos.find(p=>p.id===mediaId && p.owner_id===APP.profile.id);
+  if(!media) return toast('You can only delete your own media.');
+  if(!confirm(`Delete ${media.name || 'this media item'}?`)) return;
+  try{
+    if(media.storage_path) await APP.sb.storage.from(MEDIA_BUCKET).remove([media.storage_path]);
+    await dbDelete('photos', media.id, 'owner_id');
+    await loadAll(); renderAll();
+  }catch(e){ console.error(e); toast('Media delete failed: '+friendlySupabaseError(e)); }
+}
+async function moveMedia(mediaId){
+  const media=APP.photos.find(p=>p.id===mediaId && p.owner_id===APP.profile.id);
+  if(!media) return toast('You can only move your own media.');
+  const newAlbumId=$(`#move-${mediaId}`)?.value;
+  if(!newAlbumId || newAlbumId===media.album_id) return;
+  const target=APP.albums.find(a=>a.id===newAlbumId && a.owner_id===APP.profile.id);
+  if(!target) return toast('Choose one of your own albums.');
+  try{
+    let update={album_id:newAlbumId};
+    if(media.storage_path){
+      const kind=media.media_kind || (media.type||'').startsWith('video/')?'video':'image';
+      const fileName=media.storage_path.split('/').pop() || `${Date.now()}-${media.name||'media'}`;
+      const newPath=`${APP.profile.id}/${newAlbumId}/${kind}s/${fileName}`;
+      const mv=await APP.sb.storage.from(MEDIA_BUCKET).move(media.storage_path,newPath);
+      if(mv.error) throw mv.error;
+      update.storage_path=newPath;
+      update.url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(newPath).data.publicUrl;
+    }
+    await dbUpdate('photos', media.id, update, 'owner_id');
+    await loadAll(); renderAll();
+  }catch(e){ console.error(e); toast('Move failed: '+friendlySupabaseError(e)); }
+}
 function renderSelectors(){ const opts=linkedIds().map(id=>`<option value="${id}">${escapeHtml(nameOf(id))}</option>`).join(''); $('#callPartnerSelect').innerHTML=opts; $('#messageTo').innerHTML=opts; $('#recordingsList').innerHTML=APP.recordings.filter(r=>r.owner_id===APP.profile.id).map(r=>`<div class="feed-item"><a href="${r.url||r.data_url}" download="${escapeHtml(r.name)}">${escapeHtml(r.name)}</a><br><small>${new Date(r.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No recordings yet.</p>'; }
 async function getMedia(){ APP.localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true}); $('#localVideo').srcObject=APP.localStream; return APP.localStream; }
 function newPeer(){ const pc=new RTCPeerConnection({iceServers:TURN_ICE_SERVERS}); pc.ontrack=e=>{APP.remoteStream=e.streams[0]; $('#remoteVideo').srcObject=APP.remoteStream;}; pc.onicecandidate=e=>{ if(e.candidate&&APP.currentCallId) dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'ice',payload:e.candidate,created_at:now()}); }; return pc; }
@@ -145,12 +254,64 @@ async function startCall(){ const to=$('#callPartnerSelect').value; if(!to)retur
 async function joinLatestCall(){ const {data}=await APP.sb.from('calls').select('*').or(`to_id.eq.${APP.profile.id},from_id.eq.${APP.profile.id}`).order('created_at',{ascending:false}).limit(1); const call=data?.[0]; if(!call)return toast('No call found.'); APP.currentCallId=call.id; await getMedia(); APP.peer=newPeer(); APP.localStream.getTracks().forEach(t=>APP.peer.addTrack(t,APP.localStream)); listenSignals(); const {data:sigs}=await APP.sb.from('signals').select('*').eq('call_id',call.id).order('created_at',{ascending:true}); for(const s of sigs||[]) await handleSignal(s); }
 function listenSignals(){ const ch=APP.sb.channel('signals:'+APP.currentCallId).on('postgres_changes',{event:'INSERT',schema:'public',table:'signals',filter:`call_id=eq.${APP.currentCallId}`},e=>handleSignal(e.new)).subscribe(); APP.realtimeChannels.push(ch); }
 async function handleSignal(s){ if(!APP.peer||s.from_id===APP.profile.id)return; if(s.type==='offer'){ await APP.peer.setRemoteDescription(new RTCSessionDescription(s.payload)); const ans=await APP.peer.createAnswer(); await APP.peer.setLocalDescription(ans); await dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'answer',payload:ans,created_at:now()}); } if(s.type==='answer') await APP.peer.setRemoteDescription(new RTCSessionDescription(s.payload)); if(s.type==='ice') try{await APP.peer.addIceCandidate(new RTCIceCandidate(s.payload));}catch{} }
-function mixedStream(){ const stream=new MediaStream(); if(APP.localStream) APP.localStream.getTracks().forEach(t=>stream.addTrack(t)); if(APP.remoteStream) APP.remoteStream.getTracks().forEach(t=>stream.addTrack(t)); return stream; }
-async function toggleRecording(){ if(APP.recorder?.state==='recording'){ APP.recorder.stop(); $('#recordCallBtn').textContent='Start recording'; await setCallRecording(false); return; } if(!confirm('Start recording this call? Make sure everyone on the call consents before continuing.')) return; const stream=mixedStream(); if(!stream.getTracks().length)return toast('Start or join a call before recording.'); APP.recordedChunks=[]; APP.recorder=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')?'video/webm;codecs=vp9,opus':'video/webm'}); APP.recorder.ondataavailable=e=>{if(e.data.size)APP.recordedChunks.push(e.data)}; APP.recorder.onstop=saveRecording; APP.recorder.start(1000); $('#recordCallBtn').textContent='Stop recording'; await setCallRecording(true); }
+function mixedStream(){
+  const localVideo=$('#localVideo');
+  const remoteVideo=$('#remoteVideo');
+  const canvas=document.createElement('canvas');
+  canvas.width=1280; canvas.height=720;
+  const ctx=canvas.getContext('2d');
+  let active=true;
+  function draw(){
+    if(!active) return;
+    ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    try{ if(remoteVideo?.srcObject) ctx.drawImage(remoteVideo,0,0,canvas.width,canvas.height); }catch{}
+    try{ if(localVideo?.srcObject) ctx.drawImage(localVideo,canvas.width-340,canvas.height-250,320,240); }catch{}
+    APP.recordingAnimation=requestAnimationFrame(draw);
+  }
+  draw();
+  const out=canvas.captureStream ? canvas.captureStream(30) : new MediaStream();
+  try{
+    const AudioCtx=window.AudioContext || window.webkitAudioContext;
+    const ac=new AudioCtx();
+    const dest=ac.createMediaStreamDestination();
+    [APP.localStream, APP.remoteStream].filter(Boolean).forEach(s=>{
+      if(s.getAudioTracks().length){
+        const src=ac.createMediaStreamSource(new MediaStream(s.getAudioTracks()));
+        src.connect(dest);
+      }
+    });
+    dest.stream.getAudioTracks().forEach(t=>out.addTrack(t));
+    APP.recordingAudioContext=ac;
+  }catch(e){
+    console.warn('Audio mix failed; falling back to raw audio tracks.', e);
+    [APP.localStream, APP.remoteStream].filter(Boolean).forEach(s=>s.getAudioTracks().forEach(t=>out.addTrack(t)));
+  }
+  APP.recordingCanvas={canvas, stop:()=>{active=false; if(APP.recordingAnimation) cancelAnimationFrame(APP.recordingAnimation);}};
+  return out;
+}
+function bestRecordingMime(){
+  const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'];
+  return types.find(t=>window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+}
+async function toggleRecording(){
+  if(APP.recorder?.state==='recording'){ APP.recorder.stop(); $('#recordCallBtn').textContent='Start recording'; await setCallRecording(false); return; }
+  if(!window.MediaRecorder) return toast('Call recording is not supported by this browser. Try Android Chrome or desktop Chrome/Edge.');
+  if(!confirm('Start recording this call? Make sure everyone on the call consents before continuing.')) return;
+  const stream=mixedStream();
+  if(!stream.getTracks().length)return toast('Start or join a call before recording.');
+  APP.recordedChunks=[];
+  const mimeType=bestRecordingMime();
+  APP.recorder=new MediaRecorder(stream, mimeType ? {mimeType} : undefined);
+  APP.recorder.ondataavailable=e=>{if(e.data.size)APP.recordedChunks.push(e.data)};
+  APP.recorder.onstop=saveRecording;
+  APP.recorder.start(1000);
+  $('#recordCallBtn').textContent='Stop recording';
+  await setCallRecording(true);
+}
 async function setCallRecording(v){ if(!APP.currentCallId)return; await APP.sb.from('calls').update({recording:v,status:v?'recording':'active'}).eq('id',APP.currentCallId); await loadAll(); renderRecordingBanner(); }
 function renderRecordingBanner(){ const active=APP.calls.find(c=>c.id===APP.currentCallId)?.recording; $('#recordingBanner')?.classList.toggle('hidden',!active); }
-async function saveRecording(){ const blob=new Blob(APP.recordedChunks,{type:'video/webm'}); const name=`call-recording-${Date.now()}.webm`; const path=`${APP.profile.id}/recordings/${name}`; let url=null,data_url=null; const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,blob,{contentType:'video/webm'}); if(!up.error) url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl; else data_url=await fileToDataUrl(blob); await dbInsert('recordings',{id:uid(),owner_id:APP.profile.id,call_id:APP.currentCallId,name,storage_path:url?path:null,url,data_url,created_at:now()}); await loadAll(); renderAll(); }
-function hangup(){ APP.recorder?.state==='recording'&&APP.recorder.stop(); APP.peer?.close(); APP.localStream?.getTracks().forEach(t=>t.stop()); APP.peer=null; APP.localStream=null; APP.remoteStream=null; $('#localVideo').srcObject=null; $('#remoteVideo').srcObject=null; setCallRecording(false).catch(()=>{}); }
+async function saveRecording(){ try{ APP.recordingCanvas?.stop?.(); await APP.recordingAudioContext?.close?.(); }catch{} const type=APP.recordedChunks[0]?.type || 'video/webm'; const ext=type.includes('mp4')?'mp4':'webm'; const blob=new Blob(APP.recordedChunks,{type}); const name=`call-recording-${Date.now()}.${ext}`; const path=`${APP.profile.id}/recordings/${name}`; let url=null,data_url=null,storage_path=null; try{ const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,blob,{contentType:type,upsert:false}); if(up.error) throw up.error; storage_path=path; url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl; }catch(e){ console.warn('Recording storage upload failed:', e); data_url=await fileToDataUrl(blob); } await dbInsert('recordings',{id:uid(),owner_id:APP.profile.id,call_id:APP.currentCallId,name,storage_path,url,data_url,created_at:now()}); await loadAll(); renderAll(); }
+function hangup(){ APP.recorder?.state==='recording'&&APP.recorder.stop(); try{APP.recordingCanvas?.stop?.(); APP.recordingAudioContext?.close?.();}catch{} APP.peer?.close(); APP.localStream?.getTracks().forEach(t=>t.stop()); APP.peer=null; APP.localStream=null; APP.remoteStream=null; $('#localVideo').srcObject=null; $('#remoteVideo').srcObject=null; setCallRecording(false).catch(()=>{}); }
 async function enableNotifications(){ if(!('Notification' in window)) return toast('Notifications are not supported on this browser.'); const p=await Notification.requestPermission(); toast(p==='granted'?'Notifications enabled.':'Notifications not enabled.'); }
 function handleNotification(payload){ if(!APP.profile || Notification?.permission!=='granted') return; const n=payload.new; if(!n) return; const ids=visibleProfileIds(); if((n.profile_id&&ids.includes(n.profile_id)&&n.profile_id!==APP.profile.id)||(n.to_id===APP.profile.id)){ new Notification('Couples Connect update',{body:'New linked activity received.',icon:'/icon.png'}); } }
 function setupInstallPrompt(){ let promptEvent=null; const standalone=matchMedia('(display-mode: standalone)').matches || navigator.standalone; if(standalone)return; window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptEvent=e;$('#installBanner').classList.remove('hidden')}); $('#installBtn').onclick=async()=>{ if(promptEvent){promptEvent.prompt(); await promptEvent.userChoice; $('#installBanner').classList.add('hidden');} else toast('On iPhone/iPad: tap Share, then Add to Home Screen. On Android: use the browser menu, then Install/Add to Home screen.'); }; $('#dismissInstall').onclick=()=>$('#installBanner').classList.add('hidden'); setTimeout(()=>$('#installBanner').classList.remove('hidden'),800); }

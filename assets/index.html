@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/styles.css?v=full-20260617-3" />
+  <link rel="stylesheet" href="/styles.css?v=full-20260617-5" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -82,7 +82,7 @@
       </section>
 
       <section id="albums" class="tab-panel">
-        <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos</h2><label>Album<select id="albumSelect"></select></label><input id="photoInput" type="file" accept="image/*" multiple /><button id="uploadPhotosBtn">Upload to Supabase Storage</button></div></div>
+        <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos or videos</h2><label>Album<select id="albumSelect"></select></label><input id="mediaInput" type="file" accept="image/*,video/*" multiple /><p class="muted">Supported: images and browser-playable videos. Large videos are stored in Supabase Storage, not inside the database.</p><button id="uploadMediaBtn">Upload media to Supabase Storage</button><p id="mediaStatus" class="muted"></p></div></div>
         <div id="albumGrid" class="album-grid"></div>
       </section>
 
@@ -99,6 +99,6 @@
       </section>
     </section>
   </main>
-  <script src="/app.js?v=full-20260617-3"></script>
+  <script src="/app.js?v=full-20260617-5"></script>
 </body>
 </html>
