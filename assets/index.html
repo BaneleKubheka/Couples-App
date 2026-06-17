@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#7c3aed" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Couples Connect" />
+  <title>Couples Connect</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="installBanner" class="install-banner hidden">
+    <div><strong>Install Couples Connect</strong><p>Save this app to your home screen.</p></div>
+    <button id="installBtn">Install app</button><button id="dismissInstall" class="ghost">Later</button>
+  </div>
+
+  <main class="app-shell">
+    <section id="authScreen" class="screen active">
+      <div class="card hero-card"><h1>Couples Connect</h1><p>Private profiles, linked partners, moods, notes, albums, locations, call hub and encrypted messages.</p></div>
+      <div class="grid two">
+        <div class="card">
+          <h2>Create profile</h2>
+          <label>1. Name or nickname<input id="qName" autocomplete="name" placeholder="Your display name" /></label>
+          <label>2. Birthday, city, timezone and distance situation<textarea id="qBasics"></textarea></label>
+          <label>3. Personality, love language and communication style<textarea id="qPersonality"></textarea></label>
+          <label>4. Relationship needs, boundaries, triggers and reassurance style<textarea id="qNeeds"></textarea></label>
+          <label>5. Interests, goals, favourite memories and future plans<textarea id="qLife"></textarea></label>
+          <label>Phone number for Phone / FaceTime / WhatsApp<input id="qPhone" type="tel" placeholder="e.g. +27821234567" /></label>
+          <label>WhatsApp number if different<input id="qWhatsApp" type="tel" placeholder="Optional" /></label>
+          <label>FaceTime email or phone<input id="qFacetime" placeholder="Optional: email or phone number" /></label>
+          <label>Recovery passcode<input id="qPasscode" type="password" placeholder="Use this to sign in on another browser" /></label>
+          <button id="createProfileBtn" type="button" onclick="window.createProfile && window.createProfile()">Create cloud profile</button><p id="authStatus" class="status-line"></p>
+        </div>
+        <div class="card">
+          <h2>Sign in to existing profile</h2>
+          <p class="muted">Use the profile code and recovery passcode generated when the profile was created.</p>
+          <label>Profile code<input id="loginProfileId" placeholder="Paste profile code" /></label>
+          <label>Recovery passcode<input id="loginPasscode" type="password" /></label>
+          <button id="loginBtn" type="button" onclick="window.loginProfile && window.loginProfile()">Sign in</button>
+          <button id="recoverLocalBtn" class="secondary">Use saved profile on this browser</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="appScreen" class="screen">
+      <header class="topbar"><div><h1>Couples Connect</h1><p id="activeProfileText" class="muted"></p></div><button id="logoutBtn" class="ghost">Sign out</button></header>
+      <nav class="tabs">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="profile">Public Profile</button>
+        <button class="tab admin-only" data-tab="partners">Partner Management</button>
+        <button class="tab" data-tab="albums">Albums</button>
+        <button class="tab" data-tab="messages">Messages</button>
+        <button class="tab" data-tab="calls">Calls</button>
+        <button class="tab" data-tab="location">Location</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </nav>
+
+      <section id="dashboard" class="tab-panel active">
+        <div class="grid two">
+          <div class="card"><h2>Mood check-in</h2><div class="mood-row" id="moodButtons"></div><textarea id="moodNote" placeholder="Optional mood note"></textarea><button id="saveMoodBtn">Share mood</button></div>
+          <div class="card"><h2>Public note</h2><textarea id="publicNote" placeholder="Write something linked profiles can see"></textarea><button id="saveNoteBtn">Post note</button></div>
+        </div>
+        <div class="grid two"><div class="card"><h2>Linked moods</h2><div id="moodFeed" class="feed"></div></div><div class="card"><h2>Shared notes</h2><div id="notesFeed" class="feed"></div></div></div>
+        <div class="card"><h2>Interactive together board</h2><div class="quick-actions"><button data-prompt="I miss you today.">Send: I miss you</button><button data-prompt="Pick a movie for us tonight?">Plan movie night</button><button data-prompt="Countdown to our next visit starts now.">Start visit countdown</button></div><div id="activityFeed" class="feed"></div></div>
+      </section>
+
+      <section id="profile" class="tab-panel">
+        <div class="card"><h2>Editable public profile information</h2><p class="muted">These are the signup questions and answers. Linked profiles can see them.</p>
+          <label>Name or nickname<input id="editName" /></label>
+          <label>Birthday, city, timezone and distance situation<textarea id="editBasics"></textarea></label>
+          <label>Personality, love language and communication style<textarea id="editPersonality"></textarea></label>
+          <label>Relationship needs, boundaries, triggers and reassurance style<textarea id="editNeeds"></textarea></label>
+          <label>Interests, goals, favourite memories and future plans<textarea id="editLife"></textarea></label>
+          <label>Phone number<input id="editPhone" type="tel" placeholder="e.g. +27821234567" /></label>
+          <label>WhatsApp number if different<input id="editWhatsApp" type="tel" placeholder="Optional" /></label>
+          <label>FaceTime email or phone<input id="editFacetime" placeholder="Optional" /></label>
+          <button id="saveProfileBtn">Save public profile</button>
+        </div>
+        <div class="card"><h2>Linked public profiles</h2><div id="publicProfiles" class="cards-list"></div></div>
+      </section>
+
+      <section id="partners" class="tab-panel admin-only-panel">
+        <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Admin direct profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Admin link profiles</button></div></div>
+        <div class="card"><h2>Your partners</h2><div id="partnerList" class="cards-list"></div></div>
+        <div class="card"><h2>Accepted linked profiles</h2><div id="linkedProfilesList" class="cards-list"></div></div>
+      </section>
+
+      <section id="albums" class="tab-panel">
+        <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos or videos</h2><label>Album<select id="albumSelect"></select></label><input id="mediaInput" type="file" accept="image/*,video/*" multiple /><p class="muted">Images are compressed automatically before upload. Videos are uploaded if under 500MB; videos over 500MB are browser-compressed where supported, otherwise the app will ask you to trim/compress the file first.</p><button id="uploadMediaBtn">Upload media to Supabase Storage</button><p id="mediaStatus" class="muted"></p></div></div>
+        <div id="albumGrid" class="album-grid"></div>
+      </section>
+
+      <section id="messages" class="tab-panel">
+        <div class="grid two"><div class="card"><h2>Encrypted messages</h2><p class="muted">Messages are encrypted in the browser using your shared phrase before being saved to Supabase.</p><label>Shared encryption phrase<input id="messagePhrase" type="password" placeholder="Both profiles must use the same phrase" /></label><label>Send to<select id="messageTo"></select></label><textarea id="messageBody" placeholder="Write private message"></textarea><button id="sendMessageBtn">Encrypt and send</button></div><div class="card"><h2>Inbox</h2><div id="messagesFeed" class="feed"></div></div></div>
+      </section>
+
+      <section id="calls" class="tab-panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>Call Hub</h2>
+            <p class="muted">External calls are more reliable than in-app browser calling. Choose your linked profile, then open WhatsApp, phone, FaceTime video, or FaceTime audio.</p>
+            <label>Linked profile<select id="callHubPartnerSelect"></select></label>
+            <div id="callContactSummary" class="feed-item muted">No linked profile selected.</div>
+            <div class="quick-actions call-hub-actions">
+              <button id="whatsappCallBtn" type="button">WhatsApp</button>
+              <button id="phoneCallBtn" type="button">Phone</button>
+              <button id="facetimeVideoBtn" type="button">FaceTime Video</button>
+              <button id="facetimeAudioBtn" type="button">FaceTime Audio</button>
+            </div>
+            <p class="muted">FaceTime links work on Apple devices. WhatsApp links open WhatsApp where installed. Browser security prevents this app from recording external calls directly.</p>
+          </div>
+          <div class="card">
+            <h2>Call notes</h2>
+            <label>Call note<textarea id="callNoteBody" placeholder="Save notes about the call, plans made, or memories from the call."></textarea></label>
+            <button id="saveCallNoteBtn" type="button">Save call note</button>
+            <div id="callNotesFeed" class="feed"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="location" class="tab-panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>Location sharing</h2>
+            <p class="muted">Share a one-time location or start live location updates while the app is open. Your linked profiles will see your latest shared location.</p>
+            <button id="shareLocationOnceBtn" type="button">Share current location once</button>
+            <button id="startLiveLocationBtn" type="button" class="secondary">Start live location</button>
+            <button id="stopLiveLocationBtn" type="button" class="danger">Stop live location</button>
+            <button id="refreshLocationsBtn" type="button" class="ghost">Refresh locations</button>
+            <p id="locationStatus" class="status-line"></p>
+          </div>
+          <div class="card location-map-card">
+            <h2>Shared locations</h2>
+            <div id="locationFeed" class="feed"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings" class="tab-panel">
+        <div class="card">
+          <h2>Partner link request</h2>
+          <p class="muted">Any user can send a link request using another profile code. The other profile must accept before shared content appears. Regular users can only see and interact with their accepted linked profile.</p>
+          <p>Your profile code:</p><code id="requestMyCode"></code><button id="copyProfileCodeBtn" type="button" class="ghost">Copy profile code</button>
+          <label>Partner profile code<input id="requestPartnerCode" placeholder="Paste partner profile code" /></label>
+          <button id="sendLinkRequestBtn" type="button">Send link request</button>
+          <p id="linkRequestStatus" class="status-line"></p>
+          <div id="linkRequestsPanel" class="feed"></div>
+        </div>
+        <div class="card"><h2>Settings</h2><button id="enableNotificationsBtn">Enable notifications</button><button id="exportBtn" class="secondary">Export local backup JSON</button><button id="clearLocalBtn" class="danger">Clear this browser only</button><pre id="profilePreview"></pre></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="galleryModal" class="gallery-modal hidden" aria-modal="true" role="dialog">
+    <div class="gallery-toolbar">
+      <div><h3 id="galleryTitle">Media</h3><small id="galleryCounter"></small></div>
+      <button type="button" class="ghost" onclick="closeGallery()">Close</button>
+      <div class="gallery-actions">
+        <button type="button" class="ghost" onclick="galleryPrev()">Previous</button>
+        <button type="button" class="ghost" onclick="galleryNext()">Next</button>
+      </div>
+    </div>
+    <div id="galleryBody" class="gallery-body"></div>
+    <div id="galleryMeta" class="gallery-meta"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
