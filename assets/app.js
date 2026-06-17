@@ -1,7 +1,7 @@
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
-const CACHE_VERSION = 'gallery-location-20260617-10-signinfix';
+const CACHE_VERSION = 'gallery-location-20260617-11-syntax-signinfix';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
