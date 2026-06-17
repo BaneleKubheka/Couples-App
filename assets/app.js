@@ -1,9 +1,9 @@
-console.log('Couples Connect app version: clean-no-version-errors-20260617');
+console.log('Couples Connect app version: clean-no-version-errors-20260617-fix2');
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
 const ADMIN_PROFILE_ID = '0a10a4c8-db73-4696-bf5d-58472c72304b';
-const CACHE_VERSION = 'clean-no-version-errors-20260617';
+const CACHE_VERSION = 'clean-no-version-errors-20260617-fix2';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
@@ -616,6 +616,130 @@ function mixedStream(){ return new MediaStream(); }
 async function saveRecording(){ toast('Use the Call Hub and upload external recordings manually.'); }
 async function toggleRecording(){ toast('Recording external calls is not available inside the browser. Upload recordings manually.'); }
 function hangup(){}
+
+
+
+// ---- Stable missing-feature implementations added to prevent startup/sign-in crashes ----
+async function enableNotifications(){
+  try{
+    if(!('Notification' in window)) return toast('This browser does not support notifications.');
+    const permission = await Notification.requestPermission();
+    saveLS('cc_notifications_enabled', permission === 'granted');
+    toast(permission === 'granted' ? 'Notifications enabled for this browser.' : 'Notifications were not enabled.');
+  }catch(e){ console.warn('Notifications unavailable:', e); toast('Notifications are not available in this browser.'); }
+}
+
+function handleNotification(payload){
+  try{
+    if(!getLS('cc_notifications_enabled', false)) return;
+    if(!('Notification' in window) || Notification.permission !== 'granted') return;
+    const row = payload?.new || {};
+    const actor = row.profile_id || row.from_id || row.owner_id;
+    if(!APP.profile || actor === APP.profile.id) return;
+    if(actor && !visibleProfileIds().includes(actor)) return;
+    let title = 'Couples Connect';
+    let body = 'New linked activity received.';
+    if(payload?.table === 'moods') body = `${nameOf(actor)} shared a mood.`;
+    if(payload?.table === 'notes') body = `${nameOf(actor)} posted a note.`;
+    if(payload?.table === 'photos') body = `${nameOf(actor)} uploaded media.`;
+    if(payload?.table === 'messages') body = `${nameOf(actor)} sent a message.`;
+    if(payload?.table === 'location_shares') body = `${nameOf(actor)} shared a location.`;
+    new Notification(title, { body, icon: 'icon.png' });
+  }catch(e){ console.warn('Notification skipped:', e); }
+}
+
+function getCurrentPositionOnce(){
+  return new Promise((resolve, reject)=>{
+    if(!navigator.geolocation) return reject(new Error('Geolocation is not supported by this browser.'));
+    navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:true, timeout:20000, maximumAge:10000 });
+  });
+}
+
+async function saveLocationPosition(position, mode='snapshot'){
+  if(!APP.profile) throw new Error('Sign in first.');
+  if(!APP.sb) throw new Error('Cloud connection is not ready.');
+  const c = position.coords;
+  await dbInsert('location_shares', {
+    id: uid(),
+    profile_id: APP.profile.id,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    accuracy: c.accuracy ?? null,
+    share_mode: mode,
+    is_live: mode === 'live',
+    created_at: now(),
+    updated_at: now()
+  });
+}
+
+async function shareLocationOnce(){
+  setLocationStatus('Requesting location permission...');
+  try{
+    const pos = await getCurrentPositionOnce();
+    await saveLocationPosition(pos, 'snapshot');
+    await loadAll();
+    renderLocations();
+    setLocationStatus('Location shared.');
+  }catch(e){
+    console.error('Location share failed:', e);
+    setLocationStatus('Location share failed: ' + (e.message || e));
+  }
+}
+
+function startLiveLocation(){
+  if(!navigator.geolocation) return setLocationStatus('Geolocation is not supported by this browser.');
+  if(APP.liveLocationWatchId !== null) return setLocationStatus('Live location is already running.');
+  setLocationStatus('Starting live location...');
+  APP.liveLocationWatchId = navigator.geolocation.watchPosition(async pos=>{
+    try{
+      await saveLocationPosition(pos, 'live');
+      await loadAll();
+      renderLocations();
+      setLocationStatus('Live location active. Latest update: ' + new Date().toLocaleTimeString());
+    }catch(e){ console.error('Live location update failed:', e); setLocationStatus('Live location update failed: ' + friendlySupabaseError(e)); }
+  }, err=>{
+    console.error('Live location permission/error:', err);
+    setLocationStatus('Live location failed: ' + (err.message || err));
+    stopLiveLocation();
+  }, { enableHighAccuracy:true, timeout:20000, maximumAge:5000 });
+}
+
+function stopLiveLocation(){
+  if(APP.liveLocationWatchId !== null && navigator.geolocation){
+    navigator.geolocation.clearWatch(APP.liveLocationWatchId);
+  }
+  APP.liveLocationWatchId = null;
+  setLocationStatus('Live location stopped.');
+}
+
+function latestLocationByProfile(){
+  const ids = visibleProfileIds();
+  const latest = new Map();
+  for(const loc of APP.location_shares || []){
+    if(!ids.includes(loc.profile_id)) continue;
+    const old = latest.get(loc.profile_id);
+    const t = new Date(loc.updated_at || loc.created_at || 0).getTime();
+    const ot = old ? new Date(old.updated_at || old.created_at || 0).getTime() : -1;
+    if(t > ot) latest.set(loc.profile_id, loc);
+  }
+  return [...latest.values()].sort((a,b)=>new Date(b.updated_at||b.created_at)-new Date(a.updated_at||a.created_at));
+}
+
+function renderLocations(){
+  const feed = $('#locationFeed');
+  if(!feed) return;
+  const rows = latestLocationByProfile();
+  feed.innerHTML = rows.map(loc=>{
+    const url = `https://www.google.com/maps?q=${encodeURIComponent(loc.latitude + ',' + loc.longitude)}`;
+    return `<div class="feed-item"><strong>${escapeHtml(nameOf(loc.profile_id))}</strong><br>Latest ${escapeHtml(loc.share_mode || 'location')} location<br><small>${Number(loc.latitude).toFixed(6)}, ${Number(loc.longitude).toFixed(6)}${loc.accuracy ? ' • ±' + Math.round(loc.accuracy) + 'm' : ''}</small><br><small>${new Date(loc.updated_at || loc.created_at).toLocaleString()}</small><br><a href="${url}" target="_blank" rel="noopener">Open in Google Maps</a></div>`;
+  }).join('') || '<p class="muted">No shared locations yet.</p>';
+}
+
+function renderRecordingBanner(){
+  const el = $('#recordingBanner');
+  if(el) el.classList.add('hidden');
+}
+// ---- End stable implementations ----
 
 function setupInstallPrompt(){
   let promptEvent=null;
