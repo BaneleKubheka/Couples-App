@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=cache-bypass-signin-20260617-15" />
+  <link rel="stylesheet" href="styles.css?v=admin-location-consent-20260617-16" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -48,7 +48,7 @@
       <nav class="tabs">
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="profile">Public Profile</button>
-        <button class="tab" data-tab="partners">Partners</button>
+        <button class="tab" data-tab="partners" id="partnersTab">Partners</button>
         <button class="tab" data-tab="albums">Albums</button>
         <button class="tab" data-tab="messages">Messages</button>
         <button class="tab" data-tab="calls">Calls</button>
@@ -77,7 +77,7 @@
         <div class="card"><h2>Linked public profiles</h2><div id="publicProfiles" class="cards-list"></div></div>
       </section>
 
-      <section id="partners" class="tab-panel">
+      <section id="partners" class="tab-panel"><div class="card admin-note"><strong>Admin-only:</strong> this partner management area is visible only to the app owner/admin.</div>
         <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Link profiles</button></div></div>
         <div class="card"><h2>Your partners</h2><div id="partnerList" class="cards-list"></div></div>
       </section>
@@ -109,7 +109,13 @@
           </div>
           <div class="card location-map-card">
             <h2>Shared locations</h2>
+            <p class="muted">Locations appear here only after a user shares a one-time location or starts live sharing in their browser.</p>
             <div id="locationFeed" class="feed"></div>
+          </div>
+          <div class="card hidden" id="adminLocationPanel">
+            <h2>Admin stored locations</h2>
+            <p class="muted">Admin view of latest locations that users have explicitly shared and stored in Supabase.</p>
+            <div id="adminLocationFeed" class="feed"></div>
           </div>
         </div>
       </section>
@@ -132,6 +138,6 @@
     <div id="galleryMeta" class="gallery-meta"></div>
   </div>
 
-  <script src="app.js?v=gallery-location-20260617-11-syntax-signinfix"></script>
+  <script src="app.js?v=admin-location-consent-20260617-16"></script>
 </body>
 </html>
