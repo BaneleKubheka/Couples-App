@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/styles.css?v=full-20260617-5" />
+  <link rel="stylesheet" href="/styles.css?v=gallery-location-20260617-9" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -48,8 +48,8 @@
       <nav class="tabs">
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="profile">Public Profile</button>
-        <button class="tab" data-tab="partners">Partners</button>
         <button class="tab" data-tab="albums">Albums</button>
+        <button class="tab" data-tab="location">Location</button>
         <button class="tab" data-tab="messages">Messages</button>
         <button class="tab" data-tab="calls">Calls</button>
         <button class="tab" data-tab="settings">Settings</button>
@@ -76,14 +76,31 @@
         <div class="card"><h2>Linked public profiles</h2><div id="publicProfiles" class="cards-list"></div></div>
       </section>
 
-      <section id="partners" class="tab-panel">
-        <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Link profiles</button></div></div>
-        <div class="card"><h2>Your partners</h2><div id="partnerList" class="cards-list"></div></div>
-      </section>
-
       <section id="albums" class="tab-panel">
         <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos or videos</h2><label>Album<select id="albumSelect"></select></label><input id="mediaInput" type="file" accept="image/*,video/*" multiple /><p class="muted">Supported: images and browser-playable videos. Large videos are stored in Supabase Storage, not inside the database.</p><button id="uploadMediaBtn">Upload media to Supabase Storage</button><p id="mediaStatus" class="muted"></p></div></div>
         <div id="albumGrid" class="album-grid"></div>
+      </section>
+
+      <section id="location" class="tab-panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>Location sharing</h2>
+            <p class="muted">Share a one-time location or keep live location updating while the app is open. Browsers do not allow continuous location updates after the app is fully closed.</p>
+            <button id="shareLocationOnceBtn">Share current location once</button>
+            <button id="startLiveLocationBtn" class="secondary">Start live location</button>
+            <button id="stopLiveLocationBtn" class="danger">Stop live location</button>
+            <button id="refreshLocationsBtn" class="ghost">Refresh locations</button>
+            <p id="locationStatus" class="status-line"></p>
+          </div>
+          <div class="card">
+            <h2>Privacy note</h2>
+            <p class="muted">Only linked profiles can view shared locations in the app interface. Only share live location when you intentionally want to.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Shared locations</h2>
+          <div id="locationFeed" class="feed"></div>
+        </div>
       </section>
 
       <section id="messages" class="tab-panel">
@@ -95,10 +112,21 @@
       </section>
 
       <section id="settings" class="tab-panel">
+        <div class="card"><h2>Profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><button id="copyProfileCodeBtn" class="ghost">Copy profile code</button><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Link profiles</button><h3>Linked profiles</h3><div id="linkedProfilesList" class="cards-list"></div></div>
         <div class="card"><h2>Settings</h2><button id="enableNotificationsBtn">Enable notifications</button><button id="exportBtn" class="secondary">Export local backup JSON</button><button id="clearLocalBtn" class="danger">Clear this browser only</button><pre id="profilePreview"></pre></div>
       </section>
     </section>
   </main>
-  <script src="/app.js?v=full-20260617-5"></script>
+
+  <div id="galleryModal" class="gallery-modal hidden" aria-modal="true" role="dialog">
+    <div class="gallery-toolbar">
+      <button class="ghost" onclick="closeGallery()">Close</button>
+      <div><strong id="galleryTitle">Media</strong><br><small id="galleryCounter"></small></div>
+      <div><button class="ghost" onclick="galleryPrev()">‹ Previous</button><button class="ghost" onclick="galleryNext()">Next ›</button></div>
+    </div>
+    <div id="galleryBody" class="gallery-body"></div>
+    <div id="galleryMeta" class="gallery-meta"></div>
+  </div>
+  <script src="/app.js?v=gallery-location-20260617-9"></script>
 </body>
 </html>
