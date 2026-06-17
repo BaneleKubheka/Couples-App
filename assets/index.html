@@ -92,8 +92,21 @@
       </section>
 
       <section id="calls" class="tab-panel">
-        <div class="card"><h2>Video / voice calls</h2><p class="muted">Uses WebRTC, Supabase signalling, recording consent and visible recording status. TURN support is wired in; add real TURN credentials in app.js if required.</p><div id="recordingBanner" class="recording-banner hidden">● Recording in progress</div><div class="call-controls"><select id="callPartnerSelect"></select><button id="startCallBtn">Start call</button><button id="joinCallBtn">Join latest call</button><button id="recordCallBtn">Start recording</button><button id="hangupBtn" class="danger">Hang up</button></div><div class="video-grid"><video id="localVideo" autoplay muted playsinline></video><video id="remoteVideo" autoplay playsinline></video></div><div id="recordingsList" class="feed"></div></div>
-      </section>
+<div class="card">
+<h2>Call Hub</h2>
+<p class="muted">Launch calls using your preferred platform.</p>
+<div class="call-controls">
+<button onclick="window.open('https://wa.me/','_blank')">WhatsApp Call</button>
+<button onclick="window.location.href='tel:'">Phone Call</button>
+<button onclick="window.location.href='facetime:'">FaceTime Video</button>
+<button onclick="window.location.href='facetime-audio:'">FaceTime Audio</button>
+</div>
+<div class="card">
+<h3>Call Notes</h3>
+<textarea id="callNotes" placeholder="Save notes about your call"></textarea>
+</div>
+</div>
+</section>
 
 
       <section id="location" class="tab-panel">
