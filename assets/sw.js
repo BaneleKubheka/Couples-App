@@ -1,9 +1,20 @@
-const CACHE='couples-connect-no-calls-admin-unlink-20260617';
-const ASSETS=['./','./index.html','./styles.css','./app.js','./manifest.json','./icon.png'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',e=>{
-  const req=e.request;
-  if(req.method!=='GET') return;
-  e.respondWith(fetch(req).then(res=>{ const copy=res.clone(); caches.open(CACHE).then(c=>c.put(req,copy)).catch(()=>{}); return res; }).catch(()=>caches.match(req)));
+const CACHE_BUSTER = "couples-connect-cachekill-no-calls-admin-unlink";
+
+self.addEventListener("install", event => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener("fetch", event => {
+  if (event.request.method !== "GET") return;
+  event.respondWith(
+    fetch(event.request, { cache: "no-store" }).catch(() => caches.match(event.request))
+  );
 });

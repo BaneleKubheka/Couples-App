@@ -1,3 +1,4 @@
+console.log("Couples Connect app version: cachekill-no-calls-admin-unlink-20260617");
 console.log('Couples Connect app version: no-calls-admin-unlink-20260617');
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
