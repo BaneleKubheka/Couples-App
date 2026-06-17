@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#7c3aed" />
+  <title>Couples Connect</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="lockScreen" class="lock-screen hidden">
+    <div class="panel narrow">
+      <h1>Couples Connect</h1>
+      <p class="muted">Unlock to continue.</p>
+      <button id="unlockBtn" class="primary">Unlock with biometrics / passkey</button>
+      <details>
+        <summary>Use fallback PIN</summary>
+        <input id="pinInput" inputmode="numeric" type="password" placeholder="Enter PIN" />
+        <button id="pinUnlockBtn">Unlock with PIN</button>
+      </details>
+    </div>
+  </div>
+
+  <section id="setupScreen" class="setup-screen hidden">
+    <div class="panel wide">
+      <h1>Create your private profile</h1>
+      <p class="muted">Your profile stays on this device unless you export it or connect it to a backend later.</p>
+      <form id="setupForm" class="grid-form"></form>
+      <button id="completeSetupBtn" class="primary">Save profile and enable lock</button>
+    </div>
+  </section>
+
+  <div id="appShell" class="app hidden">
+    <header class="topbar">
+      <div>
+        <h1>Couples Connect</h1>
+        <p id="activeProfileText" class="muted"></p>
+      </div>
+      <button id="installBtn" class="ghost hidden">Install</button>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="profiles">Profiles</button>
+      <button class="tab" data-view="questions">Questions</button>
+      <button class="tab" data-view="albums">Albums</button>
+      <button class="tab" data-view="calls">Calls</button>
+      <button class="tab" data-view="settings">Settings</button>
+    </nav>
+
+    <main>
+      <section id="dashboard" class="view active">
+        <div class="hero card">
+          <h2 id="dashTitle">Your dashboard</h2>
+          <p id="dashSubtitle" class="muted"></p>
+          <select id="linkedPartnerSelect"></select>
+        </div>
+        <div class="cards two">
+          <article class="card"><h3>Daily question</h3><p id="dailyQuestion"></p><textarea id="dailyAnswer" placeholder="Write your answer..."></textarea><button id="saveDailyAnswer">Save answer</button></article>
+          <article class="card"><h3>Mood check-in</h3><select id="moodValue"><option>Happy</option><option>Missing them</option><option>Overwhelmed</option><option>Calm</option><option>Needs reassurance</option></select><textarea id="moodNote" placeholder="Optional note"></textarea><button id="saveMood">Save mood</button></article>
+        </div>
+        <div class="cards two"><article class="card"><h3>Next visit</h3><input id="nextVisit" type="datetime-local"/><button id="saveVisit">Save date</button><p id="countdown" class="big"></p></article><article class="card"><h3>Private notes</h3><textarea id="privateNote" placeholder="Notes only visible on this device"></textarea><button id="savePrivateNote">Save note</button><div id="notesList"></div></article></div>
+      </section>
+
+      <section id="profiles" class="view">
+        <div class="cards two">
+          <article class="card"><h2>Your profile</h2><div id="myProfileSummary"></div><button id="editProfileBtn">Edit profile questions</button></article>
+          <article class="card"><h2>Add / link a partner</h2><input id="partnerName" placeholder="Partner display name"/><input id="partnerCode" placeholder="Optional linking code"/><label class="inline"><input id="partnerVisible" type="checkbox" checked/> Show this partner on dashboard</label><button id="addPartnerBtn" class="primary">Add partner profile</button><p class="muted">This creates a local partner profile. For real two-way syncing, connect a backend such as Cloudflare Workers + D1/R2.</p></article>
+        </div>
+        <article class="card"><h2>Linked partners</h2><div id="partnersList"></div></article>
+      </section>
+
+      <section id="questions" class="view">
+        <div class="cards two">
+          <article class="card"><h2>Conversation prompts</h2><p id="promptText"></p><button id="nextPrompt">Next prompt</button></article>
+          <article class="card"><h2>Compatibility quiz</h2><p id="quizText"></p><button id="nextQuiz">Next quiz</button></article>
+        </div>
+        <article class="card"><h2>Saved answers</h2><div id="answersList"></div></article>
+      </section>
+
+      <section id="albums" class="view">
+        <div class="cards two">
+          <article class="card"><h2>Create album</h2><input id="albumTitle" placeholder="Album title"/><select id="albumType"><option value="personal">Personal</option><option value="shared">Shared with selected partner</option></select><button id="createAlbumBtn">Create album</button></article>
+          <article class="card"><h2>Upload photos</h2><select id="albumSelect"></select><input id="photoUpload" type="file" accept="image/*" multiple/><button id="uploadPhotosBtn">Add photos</button><p class="muted">Photos are saved locally in this static version. Export backups from Settings.</p></article>
+        </div>
+        <div id="albumsList" class="album-grid"></div>
+      </section>
+
+      <section id="calls" class="view">
+        <div class="card"><h2>Video / voice call</h2><p class="muted">Works over HTTPS. Static hosting cannot discover another phone automatically, so use the manual WebRTC offer/answer boxes or add a Cloudflare Worker signalling service later.</p><div class="call-controls"><button id="startVideoBtn" class="primary">Start camera + mic</button><button id="startVoiceBtn">Voice only</button><button id="recordBtn">Start recording</button><button id="stopRecordBtn" class="danger">Stop recording</button><button id="hangupBtn">Hang up</button></div><div class="video-grid"><video id="localVideo" autoplay muted playsinline></video><video id="remoteVideo" autoplay playsinline></video></div></div>
+        <div class="cards two"><article class="card"><h3>Manual WebRTC connection</h3><button id="createOfferBtn">Create offer</button><button id="createAnswerBtn">Create answer from pasted offer</button><button id="acceptAnswerBtn">Accept pasted answer</button><textarea id="signalBox" placeholder="Offer/answer text appears here. Copy it to the other person, or paste theirs here."></textarea></article><article class="card"><h3>Saved recordings</h3><div id="recordingsList"></div></article></div>
+      </section>
+
+      <section id="settings" class="view">
+        <div class="cards two"><article class="card"><h2>Security</h2><input id="newPin" type="password" inputmode="numeric" placeholder="Set fallback PIN"/><button id="savePinBtn">Save PIN</button><button id="registerPasskeyBtn">Register biometric / passkey</button><label class="inline"><input id="requireLock" type="checkbox" checked/> Require unlock every time app opens</label></article><article class="card"><h2>Backup</h2><button id="exportBtn">Export full backup</button><input id="importFile" type="file" accept="application/json"/><button id="resetBtn" class="danger">Reset app</button></article></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
