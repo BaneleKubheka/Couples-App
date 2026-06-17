@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=gallery-location-20260617-10-signinfix" />
+  <link rel="stylesheet" href="styles.css?v=cache-bypass-signin-20260617-15" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -30,14 +30,14 @@
           <label>4. Relationship needs, boundaries, triggers and reassurance style<textarea id="qNeeds"></textarea></label>
           <label>5. Interests, goals, favourite memories and future plans<textarea id="qLife"></textarea></label>
           <label>Recovery passcode<input id="qPasscode" type="password" placeholder="Use this to sign in on another browser" /></label>
-          <button id="createProfileBtn" type="button" onclick="if(window.createProfile){window.createProfile()}else{document.getElementById('authStatus').textContent='App script is still loading or failed to load. Refresh once.'}">Create cloud profile</button><p id="authStatus" class="status-line"></p>
+          <button id="createProfileBtn" type="button" onclick="window.createProfile && window.createProfile()">Create cloud profile</button><p id="authStatus" class="status-line"></p>
         </div>
         <div class="card">
           <h2>Sign in to existing profile</h2>
           <p class="muted">Use the profile code and recovery passcode generated when the profile was created.</p>
           <label>Profile code<input id="loginProfileId" placeholder="Paste profile code" /></label>
           <label>Recovery passcode<input id="loginPasscode" type="password" /></label>
-          <button id="loginBtn" type="button" onclick="if(window.loginProfile){window.loginProfile()}else{document.getElementById('authStatus').textContent='App script is still loading or failed to load. Refresh once.'}">Sign in</button>
+          <button id="loginBtn" type="button" onclick="window.loginProfile && window.loginProfile()">Sign in</button>
           <button id="recoverLocalBtn" class="secondary">Use saved profile on this browser</button>
         </div>
       </div>
@@ -132,6 +132,6 @@
     <div id="galleryMeta" class="gallery-meta"></div>
   </div>
 
-  <script src="app.js?v=signin-robust-20260617-14"></script>
+  <script src="app.js?v=gallery-location-20260617-11-syntax-signinfix"></script>
 </body>
 </html>
