@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=link-requests-media-location-20260617-16" />
+  <link rel="stylesheet" href="styles.css?v=media-compress-admin-links-20260617-17" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -83,7 +83,7 @@
       </section>
 
       <section id="albums" class="tab-panel">
-        <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos or videos</h2><label>Album<select id="albumSelect"></select></label><input id="mediaInput" type="file" accept="image/*,video/*" multiple /><p class="muted">Supported: images and browser-playable videos. Large videos are stored in Supabase Storage, not inside the database.</p><button id="uploadMediaBtn">Upload media to Supabase Storage</button><p id="mediaStatus" class="muted"></p></div></div>
+        <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos or videos</h2><label>Album<select id="albumSelect"></select></label><input id="mediaInput" type="file" accept="image/*,video/*" multiple /><p class="muted">Images are compressed automatically before upload. Videos are uploaded if under 500MB; videos over 500MB are browser-compressed where supported, otherwise the app will ask you to trim/compress the file first.</p><button id="uploadMediaBtn">Upload media to Supabase Storage</button><p id="mediaStatus" class="muted"></p></div></div>
         <div id="albumGrid" class="album-grid"></div>
       </section>
 
@@ -92,35 +92,7 @@
       </section>
 
       <section id="calls" class="tab-panel">
-        <div class="card">
-          <h2>Call Hub</h2>
-          <p class="muted">External calls are more reliable on mobile. Start a FaceTime, WhatsApp or Meet call, then save notes or upload a recording/screenshot afterwards.</p>
-          <div class="call-hub-grid">
-            <div>
-              <label>Linked profile<select id="callHubPartnerSelect"></select></label>
-              <label>FaceTime email or phone<input id="facetimeContact" placeholder="email@example.com or +27123456789" /></label>
-              <label>WhatsApp phone number<input id="whatsappContact" placeholder="+27123456789" /></label>
-              <label>Google Meet / other call link<input id="meetLink" placeholder="https://meet.google.com/..." /></label>
-              <div class="call-actions">
-                <button id="facetimeVideoBtn" type="button">FaceTime video</button>
-                <button id="facetimeAudioBtn" type="button">FaceTime audio</button>
-                <button id="whatsappCallBtn" type="button">WhatsApp call</button>
-                <button id="meetCallBtn" type="button">Open Meet/link</button>
-              </div>
-            </div>
-            <div>
-              <label>Call note<textarea id="callNote" placeholder="Save what you spoke about, plans, memories, or follow-ups."></textarea></label>
-              <button id="saveCallNoteBtn" type="button">Save call note</button>
-              <label>Upload call recording / screenshot<input id="callRecordingInput" type="file" accept="video/*,audio/*,image/*" multiple /></label>
-              <button id="uploadCallRecordingBtn" type="button">Upload call media</button>
-              <p id="callHubStatus" class="muted"></p>
-            </div>
-          </div>
-          <div class="card inner-card">
-            <h3>Saved call notes and recordings</h3>
-            <div id="callHubHistory" class="feed"></div>
-          </div>
-        </div>
+        <div class="card"><h2>Video / voice calls</h2><p class="muted">Uses WebRTC, Supabase signalling, recording consent and visible recording status. TURN support is wired in; add real TURN credentials in app.js if required.</p><div id="recordingBanner" class="recording-banner hidden">● Recording in progress</div><div class="call-controls"><select id="callPartnerSelect"></select><button id="startCallBtn">Start call</button><button id="joinCallBtn">Join latest call</button><button id="recordCallBtn">Start recording</button><button id="hangupBtn" class="danger">Hang up</button></div><div class="video-grid"><video id="localVideo" autoplay muted playsinline></video><video id="remoteVideo" autoplay playsinline></video></div><div id="recordingsList" class="feed"></div></div>
       </section>
 
 
@@ -169,6 +141,6 @@
     <div id="galleryMeta" class="gallery-meta"></div>
   </div>
 
-  <script src="app-v17.js?v=call-hub-20260617-17"></script>
+  <script src="app-v17.js?v=media-compress-admin-links-20260617-17"></script>
 </body>
 </html>

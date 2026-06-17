@@ -1,9 +1,9 @@
-console.log('Couples Connect app version: call-hub-20260617-17');
+console.log('Couples Connect app version: media-compress-admin-links-20260617-17');
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
 const ADMIN_PROFILE_ID = '0a10a4c8-db73-4696-bf5d-58472c72304b';
-const CACHE_VERSION = 'call-hub-20260617-17';
+const CACHE_VERSION = 'media-compress-admin-links-20260617-17';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
@@ -91,12 +91,10 @@ function bindUI(){
   $$('.quick-actions button').forEach(b=>b.onclick=()=>postActivity(b.dataset.prompt));
   on('#sendMessageBtn','click',sendEncryptedMessage);
   on('#enableNotificationsBtn','click',enableNotifications);
-  on('#facetimeVideoBtn','click',()=>openFaceTime('video'));
-  on('#facetimeAudioBtn','click',()=>openFaceTime('audio'));
-  on('#whatsappCallBtn','click',openWhatsAppCall);
-  on('#meetCallBtn','click',openMeetLink);
-  on('#saveCallNoteBtn','click',saveCallNote);
-  on('#uploadCallRecordingBtn','click',uploadCallHubMedia);
+  on('#startCallBtn','click',startCall);
+  on('#joinCallBtn','click',joinLatestCall);
+  on('#recordCallBtn','click',toggleRecording);
+  on('#hangupBtn','click',hangup);
   on('#shareLocationOnceBtn','click',shareLocationOnce);
   on('#startLiveLocationBtn','click',startLiveLocation);
   on('#stopLiveLocationBtn','click',stopLiveLocation);
@@ -218,6 +216,17 @@ async function linkPartner(){
   $('#partnerLinkCode').value=''; await loadAll(); renderAll(); toast('Profiles linked by admin.');
 }
 
+
+async function removeLinkedProfile(linkId){
+  if(!isAdmin()) return toast('Only the app owner/admin can remove accepted profile links.');
+  const link=APP.links.find(l=>l.id===linkId);
+  if(!link) return toast('Link not found.');
+  const other=link.profile_a===APP.profile.id?link.profile_b:link.profile_a;
+  if(!confirm(`Remove accepted link with ${nameOf(other)}? This will stop shared access between these profiles.`)) return;
+  try{ await dbDelete('links', link.id); await loadAll(); renderAll(); toast('Linked profile removed.'); }
+  catch(e){ console.error(e); toast('Could not remove link: '+friendlySupabaseError(e)); }
+}
+
 async function sendLinkRequest(){
   const input=$('#requestPartnerCode'); const status=$('#linkRequestStatus');
   const code=(input?.value||'').trim();
@@ -274,21 +283,107 @@ async function createAlbum(){
 }
 
 function safeFileName(name){ return String(name||'media').replace(/[^a-z0-9_.-]/gi,'_').slice(-120); }
+const SUPABASE_FILE_LIMIT = 500 * 1024 * 1024;
+const IMAGE_MAX_DIMENSION = 1920;
+const IMAGE_TARGET_TYPE = 'image/jpeg';
+
 async function ensureStorageBucket(){
   const probe = await APP.sb.storage.from(MEDIA_BUCKET).list(APP.profile.id, {limit:1});
   if(probe.error && /not found|bucket/i.test(probe.error.message || '')) throw new Error('Supabase Storage bucket not found. Run supabase-schema.sql.');
 }
-async function uploadOneFile(file, album_id, index, total){
-  const isVideo=file.type.startsWith('video/');
-  const isImage=file.type.startsWith('image/');
+function fileExtFromMime(type, fallback){
+  if(type==='image/jpeg') return 'jpg';
+  if(type==='image/webp') return 'webp';
+  if(type==='image/png') return 'png';
+  if(type==='video/webm') return 'webm';
+  if(type==='video/mp4') return 'mp4';
+  return fallback || 'bin';
+}
+function fileNameWithExt(name, type){
+  const ext=fileExtFromMime(type, (name.split('.').pop()||'bin').toLowerCase());
+  const base=safeFileName(name).replace(/\.[a-z0-9]{1,8}$/i,'') || 'media';
+  return `${base}.${ext}`;
+}
+async function imageFileToBitmap(file){
+  if('createImageBitmap' in window) return createImageBitmap(file, {imageOrientation:'from-image'}).catch(()=>null);
+  return null;
+}
+async function loadImageElement(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=new Image(); img.decoding='async'; img.src=url; await img.decode(); return img;
+  } finally { setTimeout(()=>URL.revokeObjectURL(url), 1000); }
+}
+async function canvasToBlob(canvas, type, quality){
+  return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Image compression failed.')), type, quality));
+}
+async function compressImage(file){
+  // Always normalise images through canvas. This removes huge phone-camera payloads while keeping visual quality high.
+  let source=await imageFileToBitmap(file); let width, height;
+  if(source){ width=source.width; height=source.height; }
+  else { source=await loadImageElement(file); width=source.naturalWidth; height=source.naturalHeight; }
+  const scale=Math.min(1, IMAGE_MAX_DIMENSION / Math.max(width,height));
+  const outW=Math.max(1, Math.round(width*scale));
+  const outH=Math.max(1, Math.round(height*scale));
+  const canvas=document.createElement('canvas'); canvas.width=outW; canvas.height=outH;
+  const ctx=canvas.getContext('2d', {alpha:false}); ctx.drawImage(source,0,0,outW,outH);
+  if(source.close) source.close();
+  let quality=0.86, blob=await canvasToBlob(canvas, IMAGE_TARGET_TYPE, quality);
+  while(blob.size>SUPABASE_FILE_LIMIT && quality>0.35){ quality-=0.08; blob=await canvasToBlob(canvas, IMAGE_TARGET_TYPE, quality); }
+  const outputName=fileNameWithExt(file.name, IMAGE_TARGET_TYPE);
+  return {file:new File([blob], outputName, {type:IMAGE_TARGET_TYPE, lastModified:Date.now()}), originalSize:file.size, compressed:true, note:`image compressed ${formatBytes(file.size)} → ${formatBytes(blob.size)}`};
+}
+async function transcodeLargeVideo(file){
+  // Browser-only video compression is best-effort. It plays the local file through a canvas and records it at lower resolution.
+  if(!window.MediaRecorder) throw new Error(`${file.name} is larger than 500MB and this browser cannot compress video. Please trim/compress it before uploading.`);
+  const url=URL.createObjectURL(file);
+  const video=document.createElement('video'); video.src=url; video.muted=false; video.playsInline=true; video.preload='auto'; video.crossOrigin='anonymous';
+  await new Promise((res,rej)=>{ video.onloadedmetadata=res; video.onerror=()=>rej(new Error('Could not read video for compression.')); });
+  const duration=Number.isFinite(video.duration) ? video.duration : 0;
+  if(!duration || duration>900) throw new Error(`${file.name} is too large/long for browser compression. Please trim or compress it under 500MB first.`);
+  const maxW=1280, maxH=720;
+  const scale=Math.min(1, maxW/video.videoWidth, maxH/video.videoHeight);
+  const canvas=document.createElement('canvas'); canvas.width=Math.max(2,Math.round(video.videoWidth*scale)); canvas.height=Math.max(2,Math.round(video.videoHeight*scale));
+  const ctx=canvas.getContext('2d');
+  const fps=24;
+  const canvasStream=canvas.captureStream ? canvas.captureStream(fps) : null;
+  if(!canvasStream) throw new Error('This browser cannot compress video via canvas.captureStream.');
+  // Try to keep the original audio by capturing the element stream where the browser allows it.
+  const captured = video.captureStream ? video.captureStream() : (video.mozCaptureStream ? video.mozCaptureStream() : null);
+  if(captured) captured.getAudioTracks().forEach(t=>canvasStream.addTrack(t));
+  const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'].find(t=>MediaRecorder.isTypeSupported(t)) || '';
+  const chunks=[]; const recorder=new MediaRecorder(canvasStream, mime ? {mimeType:mime, videoBitsPerSecond:1800000, audioBitsPerSecond:96000} : undefined);
+  recorder.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+  const done=new Promise(resolve=>recorder.onstop=resolve);
+  function draw(){ if(video.paused || video.ended) return; ctx.drawImage(video,0,0,canvas.width,canvas.height); requestAnimationFrame(draw); }
+  setMediaStatus(`Compressing large video: ${file.name}. Keep this tab open until it finishes.`);
+  recorder.start(1000); await video.play(); draw();
+  await new Promise(resolve=>video.onended=resolve);
+  recorder.stop(); await done; URL.revokeObjectURL(url);
+  const blob=new Blob(chunks,{type:recorder.mimeType || 'video/webm'});
+  if(blob.size>SUPABASE_FILE_LIMIT) throw new Error(`${file.name} is still ${formatBytes(blob.size)} after browser compression. Please trim/compress it below 500MB before uploading.`);
+  const outputName=fileNameWithExt(file.name, blob.type || 'video/webm');
+  return {file:new File([blob], outputName, {type:blob.type || 'video/webm', lastModified:Date.now()}), originalSize:file.size, compressed:true, note:`video compressed ${formatBytes(file.size)} → ${formatBytes(blob.size)}`};
+}
+async function prepareMediaFile(file){
+  const isVideo=file.type.startsWith('video/'); const isImage=file.type.startsWith('image/');
   if(!isVideo && !isImage) throw new Error(`${file.name} is not a supported photo/video.`);
+  if(isImage) return await compressImage(file);
+  if(file.size <= SUPABASE_FILE_LIMIT) return {file, originalSize:file.size, compressed:false, note:'video kept original'};
+  return await transcodeLargeVideo(file);
+}
+async function uploadOneFile(file, album_id, index, total){
+  const prepared=await prepareMediaFile(file);
+  const uploadFile=prepared.file;
+  if(uploadFile.size > SUPABASE_FILE_LIMIT) throw new Error(`${file.name} is ${formatBytes(uploadFile.size)} after compression and exceeds Supabase's 500MB limit.`);
+  const isVideo=uploadFile.type.startsWith('video/');
   const kind=isVideo?'video':'image';
-  const path=`${APP.profile.id}/${album_id}/${kind}s/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeFileName(file.name)}`;
-  setMediaStatus(`Uploading ${index}/${total}: ${file.name}`);
-  const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,file,{upsert:false,contentType:file.type || (isVideo?'video/mp4':'image/jpeg')});
+  const path=`${APP.profile.id}/${album_id}/${kind}s/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeFileName(uploadFile.name)}`;
+  setMediaStatus(`Uploading ${index}/${total}: ${uploadFile.name} (${formatBytes(uploadFile.size)})`);
+  const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,uploadFile,{upsert:false,contentType:uploadFile.type || (isVideo?'video/webm':'image/jpeg')});
   if(up.error) throw up.error;
   const url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
-  const row={id:uid(),album_id,owner_id:APP.profile.id,name:file.name,type:file.type,media_kind:kind,storage_path:path,url,size_bytes:file.size,created_at:now()};
+  const row={id:uid(),album_id,owner_id:APP.profile.id,name:uploadFile.name,type:uploadFile.type,media_kind:kind,storage_path:path,url,size_bytes:uploadFile.size,original_size_bytes:prepared.originalSize,compressed:prepared.compressed,compression_note:prepared.note,created_at:now(),updated_at:now()};
   const {error}=await APP.sb.from('photos').insert(row);
   if(error){ await APP.sb.storage.from(MEDIA_BUCKET).remove([path]).catch(()=>{}); throw error; }
   return row;
@@ -298,10 +393,10 @@ async function uploadMedia(){
   if(!album_id) return toast('Create or select one of your own albums first.');
   const input=$('#mediaInput'); const files=[...input.files];
   if(!files.length) return toast('Choose photos or videos first.');
-  $('#uploadMediaBtn').disabled=true; setMediaStatus(`Preparing ${files.length} raw upload(s)...`);
+  $('#uploadMediaBtn').disabled=true; setMediaStatus(`Preparing ${files.length} upload(s). Images will be compressed automatically; videos over 500MB will be compressed where the browser supports it.`);
   let ok=0, failed=0; const errors=[];
   try{
-    const batchSize=4;
+    const batchSize=2;
     for(let i=0;i<files.length;i+=batchSize){
       const batch=files.slice(i,i+batchSize);
       const results=await Promise.allSettled(batch.map((f,j)=>uploadOneFile(f, album_id, i+j+1, files.length)));
@@ -310,7 +405,7 @@ async function uploadMedia(){
         else { failed++; const msg=friendlySupabaseError(r.reason); errors.push(msg); console.error('Upload failed:', r.reason); }
       }
       await loadAll(); renderAlbums();
-      setMediaStatus(`Uploading... ${ok} saved, ${failed} failed out of ${files.length}.`);
+      setMediaStatus(`Progress: ${ok} saved, ${failed} failed out of ${files.length}.`);
     }
     input.value='';
     const firstError=errors[0] ? ` First error: ${errors[0]}` : '';
@@ -332,8 +427,23 @@ function renderProfiles(){ const ids=visibleProfileIds(); $('#publicProfiles').i
 function renderSettingsLinking(){
   const codeEl=$('#myLinkCode'); if(codeEl) codeEl.textContent=APP.profile.id;
   const requestMyCode=$('#requestMyCode'); if(requestMyCode) requestMyCode.textContent=APP.profile.id;
-  const linked=linkedIds().map(id=>`<div class="partner-card"><h3>${escapeHtml(nameOf(id))}</h3><small>${id}</small></div>`).join('');
+  const linked=APP.links.filter(l=>l.profile_a===APP.profile?.id||l.profile_b===APP.profile?.id).map(l=>{
+    const id=l.profile_a===APP.profile.id?l.profile_b:l.profile_a;
+    const adminBtn=isAdmin()?`<br><button type="button" class="danger small" onclick="removeLinkedProfile('${l.id}')">Remove linked profile</button>`:'';
+    return `<div class="partner-card"><h3>${escapeHtml(nameOf(id))}</h3><small>${id}</small>${adminBtn}</div>`;
+  }).join('');
   const list=$('#linkedProfilesList'); if(list) list.innerHTML=linked || '<p class="muted">No linked profiles yet.</p>';
+  renderPartnerManagement();
+}
+function renderPartnerManagement(){
+  const list=$('#partnerList'); if(!list) return;
+  if(!isAdmin()){ list.innerHTML=''; return; }
+  const cards=APP.links.filter(l=>l.profile_a===APP.profile?.id||l.profile_b===APP.profile?.id).map(l=>{
+    const id=l.profile_a===APP.profile.id?l.profile_b:l.profile_a;
+    const p=APP.profiles.find(x=>x.id===id)||{};
+    return `<div class="partner-card"><h3>${escapeHtml(p.name||'Linked profile')}</h3><p><b>Profile code:</b><br><small>${id}</small></p><p>${escapeHtml(p.basics||'')}</p><button type="button" class="danger small" onclick="removeLinkedProfile('${l.id}')">Remove link</button></div>`;
+  }).join('');
+  list.innerHTML=cards || '<p class="muted">No linked profiles yet.</p>';
 }
 function applyAdminVisibility(){
   const admin=isAdmin();
@@ -394,7 +504,7 @@ function renderGalleryModal(){
   $('#galleryTitle').textContent=p.name||'Media';
   $('#galleryCounter').textContent=`${APP.galleryIndex+1} / ${APP.galleryItems.length}`;
   $('#galleryBody').innerHTML=kind==='video' ? `<video class="gallery-media" src="${src}" controls autoplay playsinline></video>` : `<img class="gallery-media" src="${src}" alt="${escapeHtml(p.name||'media')}">`;
-  $('#galleryMeta').innerHTML=`<p>${escapeHtml(p.name||'media')}<br><small>${escapeHtml(p.type||kind)} ${p.size_bytes?`• ${formatBytes(p.size_bytes)}`:''}</small></p>
+  $('#galleryMeta').innerHTML=`<p>${escapeHtml(p.name||'media')}<br><small>${escapeHtml(p.type||kind)} ${p.size_bytes?`• ${formatBytes(p.size_bytes)}`:''}${p.original_size_bytes?` • original ${formatBytes(p.original_size_bytes)}`:''}${p.compressed?' • compressed':''}</small>${p.compression_note?`<br><small>${escapeHtml(p.compression_note)}</small>`:''}</p>
     <div class="gallery-actions"><a class="buttonlike" href="${src}" download="${escapeHtml(p.name||'media')}">Download</a>
     ${canEdit?`<select id="galleryMoveSelect">${albumOptions}</select><button class="secondary" onclick="moveMediaFromGallery('${p.id}')">Move</button><button class="danger" onclick="deleteMediaFromGallery('${p.id}')">Delete</button>`:''}</div>`;
 }
@@ -429,87 +539,7 @@ async function moveMedia(mediaId, forcedAlbumId=null){
   }catch(e){ console.error(e); toast('Move failed: '+friendlySupabaseError(e)); }
 }
 
-function renderSelectors(){
-  const opts=linkedIds().map(id=>`<option value="${id}">${escapeHtml(nameOf(id))}</option>`).join('');
-  if($('#callHubPartnerSelect')) $('#callHubPartnerSelect').innerHTML=opts || '<option value="">No linked profile</option>';
-  if($('#messageTo')) $('#messageTo').innerHTML=opts;
-  renderCallHubHistory();
-}
-function callHubPartnerId(){ return $('#callHubPartnerSelect')?.value || linkedIds()[0] || ''; }
-function normalizedTel(v){ return String(v||'').replace(/[^+0-9]/g,''); }
-function externalOpen(url){
-  if(!url) return;
-  try{ window.location.href=url; }
-  catch(e){ window.open(url,'_blank','noopener,noreferrer'); }
-}
-function setCallHubStatus(msg){ const el=$('#callHubStatus'); if(el) el.textContent=msg||''; }
-async function logExternalCall(provider, action, target){
-  try{
-    const to=callHubPartnerId() || null;
-    await dbInsert('calls',{id:uid(),from_id:APP.profile.id,to_id:to,status:'external',provider,call_type:action,external_target:target||'',created_at:now()});
-    await loadAll(); renderCallHubHistory();
-  }catch(e){ console.warn('External call log failed:', e); }
-}
-function openFaceTime(mode){
-  const contact=$('#facetimeContact')?.value.trim();
-  if(!contact) return toast('Enter a FaceTime email address or phone number first.');
-  const scheme = mode === 'audio' ? 'facetime-audio://' : 'facetime://';
-  logExternalCall('FaceTime', mode, contact);
-  setCallHubStatus(`Opening FaceTime ${mode}...`);
-  externalOpen(scheme + encodeURIComponent(contact));
-}
-function openWhatsAppCall(){
-  const phone=normalizedTel($('#whatsappContact')?.value);
-  if(!phone) return toast('Enter a WhatsApp phone number first.');
-  logExternalCall('WhatsApp', 'call', phone);
-  setCallHubStatus('Opening WhatsApp chat/call. Start the voice or video call from WhatsApp.');
-  externalOpen('https://wa.me/' + phone.replace(/^\+/,''));
-}
-function openMeetLink(){
-  const link=$('#meetLink')?.value.trim();
-  if(!link) return toast('Paste a Google Meet, Zoom, Teams or other call link first.');
-  const url=/^https?:\/\//i.test(link) ? link : 'https://' + link;
-  logExternalCall('External link','open',url);
-  setCallHubStatus('Opening call link...');
-  window.open(url,'_blank','noopener,noreferrer');
-}
-async function saveCallNote(){
-  const body=$('#callNote')?.value.trim();
-  if(!body) return toast('Write a call note first.');
-  const to=callHubPartnerId() || null;
-  try{
-    await dbInsert('calls',{id:uid(),from_id:APP.profile.id,to_id:to,status:'note',provider:'Call Hub',call_type:'note',notes:body,created_at:now()});
-    $('#callNote').value=''; await loadAll(); renderCallHubHistory(); setCallHubStatus('Call note saved.');
-  }catch(e){ console.error(e); setCallHubStatus('Could not save call note: '+friendlySupabaseError(e)); }
-}
-async function uploadCallHubMedia(){
-  const input=$('#callRecordingInput'); const files=[...(input?.files||[])];
-  if(!files.length) return toast('Choose a recording, screenshot, video, audio or image first.');
-  const to=callHubPartnerId() || null;
-  setCallHubStatus(`Uploading ${files.length} call media file(s)...`);
-  let ok=0, failed=0;
-  for(const file of files){
-    try{
-      const ext=safeFileName(file.name || 'call-media');
-      const path=`${APP.profile.id}/call-hub/${Date.now()}-${Math.random().toString(16).slice(2)}-${ext}`;
-      const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,file,{upsert:false,contentType:file.type || 'application/octet-stream'});
-      if(up.error) throw up.error;
-      const url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
-      await dbInsert('recordings',{id:uid(),owner_id:APP.profile.id,call_id:null,name:file.name,storage_path:path,url,created_at:now()});
-      await dbInsert('calls',{id:uid(),from_id:APP.profile.id,to_id:to,status:'media',provider:'Call Hub',call_type:file.type||'file',external_target:url,notes:file.name,created_at:now()});
-      ok++;
-    }catch(e){ failed++; console.error('Call media upload failed:', e); }
-  }
-  input.value=''; await loadAll(); renderCallHubHistory(); setCallHubStatus(`Upload complete. ${ok} saved, ${failed} failed.`);
-}
-function renderCallHubHistory(){
-  const el=$('#callHubHistory'); if(!el || !APP.profile) return;
-  const ids=visibleProfileIds();
-  const callRows=(APP.calls||[]).filter(c=>ids.includes(c.from_id)||ids.includes(c.to_id)).map(c=>({kind:'call', created_at:c.created_at, html:`<div class="feed-item"><strong>${escapeHtml(c.provider||'Call Hub')} ${escapeHtml(c.call_type||c.status||'entry')}</strong><br>${c.notes?escapeHtml(c.notes)+'<br>':''}${c.external_target?`<a href="${escapeHtml(c.external_target)}" target="_blank" rel="noopener">Open related link</a><br>`:''}<small>${escapeHtml(nameOf(c.from_id))} • ${new Date(c.created_at).toLocaleString()}</small></div>`}));
-  const recRows=(APP.recordings||[]).filter(r=>r.owner_id===APP.profile.id).map(r=>({kind:'rec', created_at:r.created_at, html:`<div class="feed-item"><strong>${escapeHtml(r.name||'Call media')}</strong><br><a href="${escapeHtml(r.url||r.data_url||'#')}" target="_blank" rel="noopener" download>Open/download</a><br><small>${new Date(r.created_at).toLocaleString()}</small></div>`}));
-  const rows=[...callRows,...recRows].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,30);
-  el.innerHTML=rows.map(r=>r.html).join('') || '<p class="muted">No call notes or uploaded call media yet.</p>';
-}
+function renderSelectors(){ const opts=linkedIds().map(id=>`<option value="${id}">${escapeHtml(nameOf(id))}</option>`).join(''); $('#callPartnerSelect').innerHTML=opts; $('#messageTo').innerHTML=opts; $('#recordingsList').innerHTML=APP.recordings.filter(r=>r.owner_id===APP.profile.id).map(r=>`<div class="feed-item"><a href="${r.url||r.data_url}" download="${escapeHtml(r.name)}">${escapeHtml(r.name)}</a><br><small>${new Date(r.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No recordings yet.</p>'; }
 async function getMedia(){ APP.localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true}); $('#localVideo').srcObject=APP.localStream; return APP.localStream; }
 function newPeer(){ const pc=new RTCPeerConnection({iceServers:TURN_ICE_SERVERS}); pc.ontrack=e=>{APP.remoteStream=e.streams[0]; $('#remoteVideo').srcObject=APP.remoteStream;}; pc.onicecandidate=e=>{ if(e.candidate&&APP.currentCallId) dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'ice',payload:e.candidate,created_at:now()}); }; return pc; }
 async function startCall(){ const to=$('#callPartnerSelect').value; if(!to)return toast('Link a profile first.'); await getMedia(); APP.peer=newPeer(); APP.localStream.getTracks().forEach(t=>APP.peer.addTrack(t,APP.localStream)); APP.currentCallId=uid(); await dbInsert('calls',{id:APP.currentCallId,from_id:APP.profile.id,to_id:to,status:'ringing',recording:false,created_at:now()}); const offer=await APP.peer.createOffer(); await APP.peer.setLocalDescription(offer); await dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'offer',payload:offer,created_at:now()}); listenSignals(); }
@@ -595,4 +625,4 @@ function formatBytes(bytes){ if(!bytes) return ''; const units=['B','KB','MB','G
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 
 
-Object.assign(window,{createProfile,loginProfile,loadProfile,createAlbum,uploadMedia,shareLocationOnce,startLiveLocation,stopLiveLocation,openGallery,closeGallery,galleryNext,galleryPrev,sendLinkRequest,acceptLinkRequest,rejectLinkRequest});
+Object.assign(window,{createProfile,loginProfile,loadProfile,createAlbum,uploadMedia,shareLocationOnce,startLiveLocation,stopLiveLocation,openGallery,closeGallery,galleryNext,galleryPrev,sendLinkRequest,acceptLinkRequest,rejectLinkRequest,removeLinkedProfile});
