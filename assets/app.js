@@ -10,7 +10,7 @@ const TURN_ICE_SERVERS = [
 const APP = { sb:null, profile:null, selectedMood:'😊', profiles:[], partners:[], links:[], moods:[], notes:[], activities:[], albums:[], photos:[], recordings:[], messages:[], calls:[], realtimeChannels:[], localStream:null, remoteStream:null, peer:null, recorder:null, recordedChunks:[], currentCallId:null };
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
-const uid = () => crypto.randomUUID();
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
 const now = () => new Date().toISOString();
 const saveLS = (k,v)=>localStorage.setItem(k, JSON.stringify(v));
 const getLS = (k,d=null)=>{ try { const v=JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
@@ -18,20 +18,28 @@ const toast = m => alert(m);
 
 window.addEventListener('load', init);
 async function init(){
-  await clearOldAppCachesSafely();
-  if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=full-20260617-2').catch(()=>{});
-  setupInstallPrompt(); bindUI();
-  APP.sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { realtime:{ params:{ eventsPerSecond:10 } } });
-  await loadAll(); subscribeRealtime();
+  try { await clearOldAppCachesSafely(); } catch(e) { console.warn('Cache clear skipped:', e); }
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=full-20260617-3').catch(()=>{});
+  setupInstallPrompt();
+  bindUI();
+  try {
+    if(!window.supabase) throw new Error('Supabase library did not load. Check internet access or CDN blocking.');
+    APP.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { realtime:{ params:{ eventsPerSecond:10 } } });
+    await loadAll();
+    subscribeRealtime();
+  } catch(e) {
+    console.error(e);
+    setAuthStatus('Cloud connection failed: ' + e.message);
+  }
   const saved = getLS('cc_active_profile');
-  if(saved?.id) await loadProfile(saved.id, saved.passcodeHash);
+  if(saved?.id && APP.sb) await loadProfile(saved.id, saved.passcodeHash);
   else show('authScreen');
 }
 
 async function clearOldAppCachesSafely(){
   if(!('caches' in window)) return;
   const keys = await caches.keys();
-  await Promise.all(keys.filter(k=>!k.includes('full-20260617-2')).map(k=>caches.delete(k)));
+  await Promise.all(keys.filter(k=>!k.includes('full-20260617-3')).map(k=>caches.delete(k)));
 }
 function show(id){ $$('.screen').forEach(x=>x.classList.remove('active')); $('#'+id)?.classList.add('active'); }
 function bindUI(){
@@ -48,10 +56,12 @@ function bindUI(){
   $('#startCallBtn').onclick=startCall; $('#joinCallBtn').onclick=joinLatestCall; $('#recordCallBtn').onclick=toggleRecording; $('#hangupBtn').onclick=hangup;
   $('#exportBtn').onclick=exportBackup; $('#clearLocalBtn').onclick=()=>{ if(confirm('Clear only this browser? Cloud data remains in Supabase.')){ localStorage.clear(); location.reload(); } };
 }
+function setAuthStatus(message){ const el=$('#authStatus'); if(el) el.textContent=message||''; }
+function friendlySupabaseError(e){ const msg=(e?.message||String(e)); if(msg.includes('relation')||msg.includes('schema cache')) return msg + ' — run the latest supabase-schema.sql in Supabase SQL Editor.'; if(msg.includes('row-level security')) return msg + ' — run the schema again to create the RLS policies.'; if(msg.includes('Failed to fetch')) return 'Could not reach Supabase. Check internet, Supabase URL/key, and browser blocking.'; return msg; }
 async function sha256(text){ const data=new TextEncoder().encode(text); const hash=await crypto.subtle.digest('SHA-256',data); return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
-async function dbInsert(table,row){ const {error}=await APP.sb.from(table).insert(row); if(error) throw error; }
-async function dbUpsert(table,row){ const {error}=await APP.sb.from(table).upsert(row); if(error) throw error; }
-async function loadTable(t){ const {data,error}=await APP.sb.from(t).select('*').order('created_at',{ascending:false}); if(!error) APP[t]=data||[]; }
+async function dbInsert(table,row){ if(!APP.sb) throw new Error('Supabase is not connected.'); const {error}=await APP.sb.from(table).insert(row); if(error) throw error; }
+async function dbUpsert(table,row){ if(!APP.sb) throw new Error('Supabase is not connected.'); const {error}=await APP.sb.from(table).upsert(row); if(error) throw error; }
+async function loadTable(t){ if(!APP.sb){ APP[t]=[]; return; } const {data,error}=await APP.sb.from(t).select('*').order('created_at',{ascending:false}); if(error){ console.warn('Could not load '+t, error); APP[t]=APP[t]||[]; return; } APP[t]=data||[]; }
 async function loadAll(){ for(const t of ['profiles','partners','links','moods','notes','activities','albums','photos','recordings','messages','calls']) await loadTable(t); }
 function subscribeRealtime(){
   APP.realtimeChannels.forEach(c=>APP.sb.removeChannel(c)); APP.realtimeChannels=[];
@@ -60,16 +70,36 @@ function subscribeRealtime(){
   });
 }
 async function createProfile(){
-  const name=$('#qName').value.trim(), pass=$('#qPasscode').value.trim(); if(!name||!pass) return toast('Enter a name and recovery passcode.');
-  const passcode_hash=await sha256(pass);
-  const p={ id:uid(), name, basics:$('#qBasics').value, personality:$('#qPersonality').value, needs:$('#qNeeds').value, life:$('#qLife').value, passcode_hash, updated_at:now(), created_at:now() };
-  await dbInsert('profiles',p); APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcode_hash}); await loadAll(); show('appScreen'); renderAll(); toast('Profile created. Save your profile code and recovery passcode to sign in on other browsers.');
+  const btn=$('#createProfileBtn');
+  const name=$('#qName').value.trim(), pass=$('#qPasscode').value.trim();
+  if(!name||!pass) return setAuthStatus('Enter a name and recovery passcode.');
+  if(pass.length < 4) return setAuthStatus('Use a recovery passcode with at least 4 characters.');
+  if(!APP.sb) return setAuthStatus('Cloud connection is not ready. Refresh once, then try again.');
+  btn.disabled=true; btn.textContent='Creating cloud profile...'; setAuthStatus('Creating profile in Supabase...');
+  try {
+    const passcode_hash=await sha256(pass);
+    const p={ id:uid(), name, basics:$('#qBasics').value.trim(), personality:$('#qPersonality').value.trim(), needs:$('#qNeeds').value.trim(), life:$('#qLife').value.trim(), passcode_hash, updated_at:now(), created_at:now() };
+    const {error}=await APP.sb.from('profiles').insert(p);
+    if(error) throw error;
+    APP.profile=p;
+    saveLS('cc_active_profile',{id:p.id,passcodeHash:passcode_hash});
+    await loadAll();
+    show('appScreen');
+    renderAll();
+    setAuthStatus('');
+    toast('Profile created. Save your profile code and recovery passcode to sign in on another browser.');
+  } catch(e) {
+    console.error('Profile creation failed:', e);
+    setAuthStatus('Profile creation failed: ' + friendlySupabaseError(e));
+  } finally {
+    btn.disabled=false; btn.textContent='Create cloud profile';
+  }
 }
-async function loginProfile(){ const id=$('#loginProfileId').value.trim(), pass=$('#loginPasscode').value.trim(); if(!id||!pass)return toast('Enter profile code and passcode.'); await loadProfile(id, await sha256(pass), true); }
+async function loginProfile(){ const id=$('#loginProfileId').value.trim(), pass=$('#loginPasscode').value.trim(); if(!id||!pass)return setAuthStatus('Enter profile code and passcode.'); if(!APP.sb)return setAuthStatus('Cloud connection is not ready.'); setAuthStatus('Signing in...'); await loadProfile(id, await sha256(pass), true); }
 async function loadProfile(id,passcodeHash=null,showErrors=false){
-  await loadAll(); const p=APP.profiles.find(x=>x.id===id); if(!p){ if(showErrors) toast('Profile not found.'); return show('authScreen'); }
-  if(p.passcode_hash && passcodeHash && p.passcode_hash!==passcodeHash){ if(showErrors) toast('Incorrect recovery passcode.'); return show('authScreen'); }
-  APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcodeHash||p.passcode_hash}); show('appScreen'); renderAll();
+  await loadAll(); const p=APP.profiles.find(x=>x.id===id); if(!p){ if(showErrors) setAuthStatus('Profile not found. Check the profile code.'); return show('authScreen'); }
+  if(p.passcode_hash && passcodeHash && p.passcode_hash!==passcodeHash){ if(showErrors) setAuthStatus('Incorrect recovery passcode.'); return show('authScreen'); }
+  APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcodeHash||p.passcode_hash}); setAuthStatus(''); show('appScreen'); renderAll();
 }
 function linkedIds(){ return APP.links.filter(l=>l.profile_a===APP.profile?.id||l.profile_b===APP.profile?.id).map(l=>l.profile_a===APP.profile.id?l.profile_b:l.profile_a); }
 function visibleProfileIds(){ return [APP.profile?.id,...linkedIds()].filter(Boolean); }
