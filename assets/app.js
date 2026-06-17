@@ -1,7 +1,7 @@
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
-const CACHE_VERSION = 'gallery-location-20260617-9';
+const CACHE_VERSION = 'gallery-location-20260617-10-signinfix';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
@@ -59,39 +59,46 @@ async function clearOldAppCachesSafely(){
 }
 
 function show(id){ $$('.screen').forEach(x=>x.classList.remove('active')); $('#'+id)?.classList.add('active'); }
+function on(sel, event, handler){
+  const el = typeof sel === 'string' ? $(sel) : sel;
+  if(!el){ console.warn('Missing UI element for binding:', sel); return false; }
+  if(event === 'click') el.onclick = handler;
+  else el.addEventListener(event, handler);
+  return true;
+}
 
 function bindUI(){
-  $('#createProfileBtn').onclick=createProfile;
-  $('#loginBtn').onclick=loginProfile;
-  $('#recoverLocalBtn').onclick=()=>{const p=getLS('cc_active_profile'); if(p?.id) loadProfile(p.id,p.passcodeHash); else toast('No saved profile on this browser.');};
-  $('#logoutBtn').onclick=()=>{ stopLiveLocation(); localStorage.removeItem('cc_active_profile'); location.reload(); };
+  on('#createProfileBtn','click',createProfile);
+  on('#loginBtn','click',loginProfile);
+  on('#recoverLocalBtn','click',()=>{const p=getLS('cc_active_profile'); if(p?.id) loadProfile(p.id,p.passcodeHash,true); else toast('No saved profile on this browser.');});
+  on('#logoutBtn','click',()=>{ stopLiveLocation(); localStorage.removeItem('cc_active_profile'); location.reload(); });
 
   $$('.tab').forEach(b=>b.onclick=()=>{ $$('.tab,.tab-panel').forEach(x=>x.classList.remove('active')); b.classList.add('active'); $('#'+b.dataset.tab).classList.add('active'); renderAll(); });
 
   ['😍','😊','😐','🥺','😔','😡','🤒','✨'].forEach(m=>{const b=document.createElement('button'); b.className='mood'; b.textContent=m; b.onclick=()=>{$$('.mood').forEach(x=>x.classList.remove('active')); b.classList.add('active'); APP.selectedMood=m}; $('#moodButtons')?.appendChild(b);});
   $('#moodButtons .mood')?.classList.add('active');
 
-  $('#saveMoodBtn').onclick=saveMood;
-  $('#saveNoteBtn').onclick=saveNote;
-  $('#saveProfileBtn').onclick=saveProfileEdits;
-  $('#addPartnerBtn') && ($('#addPartnerBtn').onclick=addPartner);
-  $('#linkPartnerBtn').onclick=linkPartner;
-  $('#createAlbumBtn').onclick=createAlbum;
-  $('#uploadMediaBtn').onclick=uploadMedia;
+  on('#saveMoodBtn','click',saveMood);
+  on('#saveNoteBtn','click',saveNote);
+  on('#saveProfileBtn','click',saveProfileEdits);
+  on('#addPartnerBtn','click',addPartner);
+  on('#linkPartnerBtn','click',linkPartner);
+  on('#createAlbumBtn','click',createAlbum);
+  on('#uploadMediaBtn','click',uploadMedia);
   $$('.quick-actions button').forEach(b=>b.onclick=()=>postActivity(b.dataset.prompt));
-  $('#sendMessageBtn').onclick=sendEncryptedMessage;
-  $('#enableNotificationsBtn').onclick=enableNotifications;
-  $('#startCallBtn').onclick=startCall;
-  $('#joinCallBtn').onclick=joinLatestCall;
-  $('#recordCallBtn').onclick=toggleRecording;
-  $('#hangupBtn').onclick=hangup;
-  $('#shareLocationOnceBtn') && ($('#shareLocationOnceBtn').onclick=shareLocationOnce);
-  $('#startLiveLocationBtn') && ($('#startLiveLocationBtn').onclick=startLiveLocation);
-  $('#stopLiveLocationBtn') && ($('#stopLiveLocationBtn').onclick=stopLiveLocation);
-  $('#refreshLocationsBtn') && ($('#refreshLocationsBtn').onclick=async()=>{await loadAll(); renderLocations();});
-  $('#copyProfileCodeBtn') && ($('#copyProfileCodeBtn').onclick=copyProfileCode);
-  $('#exportBtn').onclick=exportBackup;
-  $('#clearLocalBtn').onclick=()=>{ if(confirm('Clear only this browser? Cloud data remains in Supabase.')){ localStorage.clear(); location.reload(); } };
+  on('#sendMessageBtn','click',sendEncryptedMessage);
+  on('#enableNotificationsBtn','click',enableNotifications);
+  on('#startCallBtn','click',startCall);
+  on('#joinCallBtn','click',joinLatestCall);
+  on('#recordCallBtn','click',toggleRecording);
+  on('#hangupBtn','click',hangup);
+  on('#shareLocationOnceBtn','click',shareLocationOnce);
+  on('#startLiveLocationBtn','click',startLiveLocation);
+  on('#stopLiveLocationBtn','click',stopLiveLocation);
+  on('#refreshLocationsBtn','click',async()=>{await loadAll(); renderLocations();});
+  on('#copyProfileCodeBtn','click',copyProfileCode);
+  on('#exportBtn','click',exportBackup);
+  on('#clearLocalBtn','click',()=>{ if(confirm('Clear only this browser? Cloud data remains in Supabase.')){ localStorage.clear(); location.reload(); } });
 
   document.addEventListener('keydown', e=>{
     if(!$('#galleryModal') || $('#galleryModal').classList.contains('hidden')) return;
@@ -146,11 +153,43 @@ async function createProfile(){
   } catch(e) { console.error('Profile creation failed:', e); setAuthStatus('Profile creation failed: ' + friendlySupabaseError(e)); }
   finally { btn.disabled=false; btn.textContent='Create cloud profile'; }
 }
-async function loginProfile(){ const id=$('#loginProfileId').value.trim(), pass=$('#loginPasscode').value.trim(); if(!id||!pass)return setAuthStatus('Enter profile code and passcode.'); if(!APP.sb)return setAuthStatus('Cloud connection is not ready.'); setAuthStatus('Signing in...'); await loadProfile(id, await sha256(pass), true); }
+async function loginProfile(){
+  const btn=$('#loginBtn');
+  const id=$('#loginProfileId')?.value.trim();
+  const pass=$('#loginPasscode')?.value.trim();
+  if(!id||!pass) return setAuthStatus('Enter profile code and passcode.');
+  if(!APP.sb) return setAuthStatus('Cloud connection is not ready. Refresh the page and check your internet connection.');
+  try{
+    if(btn){ btn.disabled=true; btn.textContent='Signing in...'; }
+    setAuthStatus('Signing in...');
+    await loadProfile(id, await sha256(pass), true);
+  }catch(e){
+    console.error('Sign in failed:', e);
+    setAuthStatus('Sign in failed: '+friendlySupabaseError(e));
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='Sign in'; }
+  }
+}
 async function loadProfile(id,passcodeHash=null,showErrors=false){
-  await loadAll(); const p=APP.profiles.find(x=>x.id===id); if(!p){ if(showErrors) setAuthStatus('Profile not found. Check the profile code.'); return show('authScreen'); }
-  if(p.passcode_hash && passcodeHash && p.passcode_hash!==passcodeHash){ if(showErrors) setAuthStatus('Incorrect recovery passcode.'); return show('authScreen'); }
-  APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcodeHash||p.passcode_hash}); setAuthStatus(''); show('appScreen'); renderAll();
+  let p=null;
+  try{
+    if(APP.sb){
+      const {data,error}=await APP.sb.from('profiles').select('*').eq('id',id).maybeSingle();
+      if(error) throw error;
+      p=data;
+      await loadAll();
+    } else {
+      await loadAll();
+      p=APP.profiles.find(x=>x.id===id);
+    }
+    if(!p){ if(showErrors) setAuthStatus('Profile not found. Check the profile code.'); return show('authScreen'); }
+    if(p.passcode_hash && passcodeHash && p.passcode_hash!==passcodeHash){ if(showErrors) setAuthStatus('Incorrect recovery passcode.'); return show('authScreen'); }
+    APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcodeHash||p.passcode_hash}); setAuthStatus(''); show('appScreen'); renderAll();
+  } catch(e){
+    console.error('Profile load failed:', e);
+    if(showErrors) setAuthStatus('Sign in failed: '+friendlySupabaseError(e));
+    show('authScreen');
+  }
 }
 
 function linkedIds(){ return APP.links.filter(l=>l.profile_a===APP.profile?.id||l.profile_b===APP.profile?.id).map(l=>l.profile_a===APP.profile.id?l.profile_b:l.profile_a); }
@@ -387,3 +426,6 @@ function setupInstallPrompt(){ let promptEvent=null; const standalone=matchMedia
 function exportBackup(){ const data={profile:APP.profile,partners:APP.partners,links:APP.links,moods:APP.moods,notes:APP.notes,activities:APP.activities,albums:APP.albums,photos:APP.photos,recordings:APP.recordings,messages:APP.messages,location_shares:APP.location_shares}; const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})); a.download='couples-connect-backup.json'; a.click(); }
 function formatBytes(bytes){ if(!bytes) return ''; const units=['B','KB','MB','GB']; let n=bytes,i=0; while(n>=1024&&i<units.length-1){n/=1024;i++;} return `${n.toFixed(n>=10||i===0?0:1)} ${units[i]}`; }
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+
+Object.assign(window,{createProfile,loginProfile,loadProfile,createAlbum,uploadMedia,shareLocationOnce,startLiveLocation,stopLiveLocation,openGallery,closeGallery,galleryNext,galleryPrev});

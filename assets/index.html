@@ -8,8 +8,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
-  <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/styles.css?v=gallery-location-20260617-9" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css?v=gallery-location-20260617-10-signinfix" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -30,14 +30,14 @@
           <label>4. Relationship needs, boundaries, triggers and reassurance style<textarea id="qNeeds"></textarea></label>
           <label>5. Interests, goals, favourite memories and future plans<textarea id="qLife"></textarea></label>
           <label>Recovery passcode<input id="qPasscode" type="password" placeholder="Use this to sign in on another browser" /></label>
-          <button id="createProfileBtn">Create cloud profile</button><p id="authStatus" class="status-line"></p>
+          <button id="createProfileBtn" type="button" onclick="window.createProfile && window.createProfile()">Create cloud profile</button><p id="authStatus" class="status-line"></p>
         </div>
         <div class="card">
           <h2>Sign in to existing profile</h2>
           <p class="muted">Use the profile code and recovery passcode generated when the profile was created.</p>
           <label>Profile code<input id="loginProfileId" placeholder="Paste profile code" /></label>
           <label>Recovery passcode<input id="loginPasscode" type="password" /></label>
-          <button id="loginBtn">Sign in</button>
+          <button id="loginBtn" type="button" onclick="window.loginProfile && window.loginProfile()">Sign in</button>
           <button id="recoverLocalBtn" class="secondary">Use saved profile on this browser</button>
         </div>
       </div>
@@ -48,10 +48,11 @@
       <nav class="tabs">
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="profile">Public Profile</button>
+        <button class="tab" data-tab="partners">Partners</button>
         <button class="tab" data-tab="albums">Albums</button>
-        <button class="tab" data-tab="location">Location</button>
         <button class="tab" data-tab="messages">Messages</button>
         <button class="tab" data-tab="calls">Calls</button>
+        <button class="tab" data-tab="location">Location</button>
         <button class="tab" data-tab="settings">Settings</button>
       </nav>
 
@@ -76,31 +77,14 @@
         <div class="card"><h2>Linked public profiles</h2><div id="publicProfiles" class="cards-list"></div></div>
       </section>
 
+      <section id="partners" class="tab-panel">
+        <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Link profiles</button></div></div>
+        <div class="card"><h2>Your partners</h2><div id="partnerList" class="cards-list"></div></div>
+      </section>
+
       <section id="albums" class="tab-panel">
         <div class="grid two"><div class="card"><h2>Create album</h2><label>Album name<input id="albumName" placeholder="e.g. December visit" /></label><label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked profiles</option></select></label><button id="createAlbumBtn">Create album</button><p id="albumStatus" class="muted"></p></div><div class="card"><h2>Upload photos or videos</h2><label>Album<select id="albumSelect"></select></label><input id="mediaInput" type="file" accept="image/*,video/*" multiple /><p class="muted">Supported: images and browser-playable videos. Large videos are stored in Supabase Storage, not inside the database.</p><button id="uploadMediaBtn">Upload media to Supabase Storage</button><p id="mediaStatus" class="muted"></p></div></div>
         <div id="albumGrid" class="album-grid"></div>
-      </section>
-
-      <section id="location" class="tab-panel">
-        <div class="grid two">
-          <div class="card">
-            <h2>Location sharing</h2>
-            <p class="muted">Share a one-time location or keep live location updating while the app is open. Browsers do not allow continuous location updates after the app is fully closed.</p>
-            <button id="shareLocationOnceBtn">Share current location once</button>
-            <button id="startLiveLocationBtn" class="secondary">Start live location</button>
-            <button id="stopLiveLocationBtn" class="danger">Stop live location</button>
-            <button id="refreshLocationsBtn" class="ghost">Refresh locations</button>
-            <p id="locationStatus" class="status-line"></p>
-          </div>
-          <div class="card">
-            <h2>Privacy note</h2>
-            <p class="muted">Only linked profiles can view shared locations in the app interface. Only share live location when you intentionally want to.</p>
-          </div>
-        </div>
-        <div class="card">
-          <h2>Shared locations</h2>
-          <div id="locationFeed" class="feed"></div>
-        </div>
       </section>
 
       <section id="messages" class="tab-panel">
@@ -111,8 +95,26 @@
         <div class="card"><h2>Video / voice calls</h2><p class="muted">Uses WebRTC, Supabase signalling, recording consent and visible recording status. TURN support is wired in; add real TURN credentials in app.js if required.</p><div id="recordingBanner" class="recording-banner hidden">● Recording in progress</div><div class="call-controls"><select id="callPartnerSelect"></select><button id="startCallBtn">Start call</button><button id="joinCallBtn">Join latest call</button><button id="recordCallBtn">Start recording</button><button id="hangupBtn" class="danger">Hang up</button></div><div class="video-grid"><video id="localVideo" autoplay muted playsinline></video><video id="remoteVideo" autoplay playsinline></video></div><div id="recordingsList" class="feed"></div></div>
       </section>
 
+
+      <section id="location" class="tab-panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>Location sharing</h2>
+            <p class="muted">Share a one-time location or start live location updates while the app is open. Your linked profiles will see your latest shared location.</p>
+            <button id="shareLocationOnceBtn" type="button">Share current location once</button>
+            <button id="startLiveLocationBtn" type="button" class="secondary">Start live location</button>
+            <button id="stopLiveLocationBtn" type="button" class="danger">Stop live location</button>
+            <button id="refreshLocationsBtn" type="button" class="ghost">Refresh locations</button>
+            <p id="locationStatus" class="status-line"></p>
+          </div>
+          <div class="card location-map-card">
+            <h2>Shared locations</h2>
+            <div id="locationFeed" class="feed"></div>
+          </div>
+        </div>
+      </section>
+
       <section id="settings" class="tab-panel">
-        <div class="card"><h2>Profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><button id="copyProfileCodeBtn" class="ghost">Copy profile code</button><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Link profiles</button><h3>Linked profiles</h3><div id="linkedProfilesList" class="cards-list"></div></div>
         <div class="card"><h2>Settings</h2><button id="enableNotificationsBtn">Enable notifications</button><button id="exportBtn" class="secondary">Export local backup JSON</button><button id="clearLocalBtn" class="danger">Clear this browser only</button><pre id="profilePreview"></pre></div>
       </section>
     </section>
@@ -120,13 +122,16 @@
 
   <div id="galleryModal" class="gallery-modal hidden" aria-modal="true" role="dialog">
     <div class="gallery-toolbar">
-      <button class="ghost" onclick="closeGallery()">Close</button>
-      <div><strong id="galleryTitle">Media</strong><br><small id="galleryCounter"></small></div>
-      <div><button class="ghost" onclick="galleryPrev()">‹ Previous</button><button class="ghost" onclick="galleryNext()">Next ›</button></div>
+      <button type="button" class="ghost" onclick="closeGallery()">Close</button>
+      <div class="gallery-actions">
+        <button type="button" class="ghost" onclick="galleryPrev()">Previous</button>
+        <button type="button" class="ghost" onclick="galleryNext()">Next</button>
+      </div>
     </div>
     <div id="galleryBody" class="gallery-body"></div>
     <div id="galleryMeta" class="gallery-meta"></div>
   </div>
-  <script src="/app.js?v=gallery-location-20260617-9"></script>
+
+  <script src="app.js?v=gallery-location-20260617-10-signinfix"></script>
 </body>
 </html>
