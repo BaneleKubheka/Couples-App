@@ -4,100 +4,175 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#7c3aed" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div id="lockScreen" class="lock-screen hidden">
-    <div class="panel narrow">
-      <h1>Couples Connect</h1>
-      <p class="muted">Unlock to continue.</p>
-      <button id="unlockBtn" class="primary">Unlock with biometrics / passkey</button>
-      <details>
-        <summary>Use fallback PIN</summary>
-        <input id="pinInput" inputmode="numeric" type="password" placeholder="Enter PIN" />
-        <button id="pinUnlockBtn">Unlock with PIN</button>
-      </details>
+  <div id="installBanner" class="install-banner hidden">
+    <div>
+      <strong>Install Couples Connect</strong>
+      <p>Save this app to your home screen for faster access.</p>
     </div>
+    <button id="installBtn">Install app</button>
+    <button id="dismissInstall" class="ghost">Later</button>
   </div>
 
-  <section id="setupScreen" class="setup-screen hidden">
-    <div class="panel wide">
-      <h1>Create your private profile</h1>
-      <p class="muted">Your profile stays on this device unless you export it or connect it to a backend later.</p>
-      <form id="setupForm" class="grid-form"></form>
-      <button id="completeSetupBtn" class="primary">Save profile and enable lock</button>
-    </div>
-  </section>
-
-  <div id="appShell" class="app hidden">
-    <header class="topbar">
-      <div>
+  <main class="app-shell">
+    <section id="configScreen" class="screen active">
+      <div class="card hero-card">
         <h1>Couples Connect</h1>
-        <p id="activeProfileText" class="muted"></p>
+        <p>A private long-distance dashboard for profiles, linked partners, moods, notes, albums, calls, and shared memories.</p>
       </div>
-      <button id="installBtn" class="ghost hidden">Install</button>
-    </header>
+      <div class="card">
+        <h2>Cloud sync setup</h2>
+        <p class="muted">For real-time syncing across devices, paste your Supabase project URL and anon key. You only do this once per browser.</p>
+        <label>Supabase URL<input id="supabaseUrl" placeholder="https://your-project.supabase.co" /></label>
+        <label>Supabase anon key<textarea id="supabaseKey" rows="3" placeholder="eyJ..." ></textarea></label>
+        <button id="saveConfigBtn">Save and continue</button>
+        <button id="demoModeBtn" class="secondary">Continue local-only demo</button>
+      </div>
+    </section>
 
-    <nav class="tabs">
-      <button class="tab active" data-view="dashboard">Dashboard</button>
-      <button class="tab" data-view="profiles">Profiles</button>
-      <button class="tab" data-view="questions">Questions</button>
-      <button class="tab" data-view="albums">Albums</button>
-      <button class="tab" data-view="calls">Calls</button>
-      <button class="tab" data-view="settings">Settings</button>
-    </nav>
+    <section id="profileScreen" class="screen">
+      <div class="card">
+        <h1>Create your profile</h1>
+        <p class="muted">Five compact questions build enough background for a useful relationship profile.</p>
+        <label>1. Name or nickname<input id="qName" autocomplete="name" placeholder="e.g. Banele" /></label>
+        <label>2. Birthday, city, timezone and distance situation<textarea id="qBasics" placeholder="e.g. 25, Cape Town/Johannesburg, UTC+2, visits monthly"></textarea></label>
+        <label>3. Personality, love language, communication style<textarea id="qPersonality" placeholder="e.g. affectionate, words of affirmation, prefers calls at night"></textarea></label>
+        <label>4. Relationship needs, boundaries, triggers and reassurance style<textarea id="qNeeds" placeholder="e.g. needs consistency, dislikes silent treatment, wants clear plans"></textarea></label>
+        <label>5. Interests, goals, favourite memories and future plans<textarea id="qLife" placeholder="e.g. movies, gym, travel, shared goals, visit plans"></textarea></label>
+        <button id="createProfileBtn">Create profile</button>
+      </div>
+    </section>
 
-    <main>
-      <section id="dashboard" class="view active">
-        <div class="hero card">
-          <h2 id="dashTitle">Your dashboard</h2>
-          <p id="dashSubtitle" class="muted"></p>
-          <select id="linkedPartnerSelect"></select>
+    <section id="appScreen" class="screen">
+      <header class="topbar">
+        <div>
+          <h1>Couples Connect</h1>
+          <p id="activeProfileText" class="muted"></p>
         </div>
-        <div class="cards two">
-          <article class="card"><h3>Daily question</h3><p id="dailyQuestion"></p><textarea id="dailyAnswer" placeholder="Write your answer..."></textarea><button id="saveDailyAnswer">Save answer</button></article>
-          <article class="card"><h3>Mood check-in</h3><select id="moodValue"><option>Happy</option><option>Missing them</option><option>Overwhelmed</option><option>Calm</option><option>Needs reassurance</option></select><textarea id="moodNote" placeholder="Optional note"></textarea><button id="saveMood">Save mood</button></article>
+        <button id="logoutBtn" class="ghost">Switch profile</button>
+      </header>
+
+      <nav class="tabs" aria-label="App sections">
+        <button class="tab active" data-tab="dashboard">Dashboard</button>
+        <button class="tab" data-tab="partners">Partners</button>
+        <button class="tab" data-tab="albums">Albums</button>
+        <button class="tab" data-tab="calls">Calls</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </nav>
+
+      <section id="dashboard" class="tab-panel active">
+        <div class="grid two">
+          <div class="card">
+            <h2>Mood check-in</h2>
+            <div class="mood-row" id="moodButtons"></div>
+            <textarea id="moodNote" placeholder="Optional mood note"></textarea>
+            <button id="saveMoodBtn">Share mood</button>
+          </div>
+          <div class="card">
+            <h2>Public note</h2>
+            <textarea id="publicNote" placeholder="Write something your linked dashboard can see..."></textarea>
+            <button id="saveNoteBtn">Post note</button>
+          </div>
         </div>
-        <div class="cards two"><article class="card"><h3>Next visit</h3><input id="nextVisit" type="datetime-local"/><button id="saveVisit">Save date</button><p id="countdown" class="big"></p></article><article class="card"><h3>Private notes</h3><textarea id="privateNote" placeholder="Notes only visible on this device"></textarea><button id="savePrivateNote">Save note</button><div id="notesList"></div></article></div>
-      </section>
-
-      <section id="profiles" class="view">
-        <div class="cards two">
-          <article class="card"><h2>Your profile</h2><div id="myProfileSummary"></div><button id="editProfileBtn">Edit profile questions</button></article>
-          <article class="card"><h2>Add / link a partner</h2><input id="partnerName" placeholder="Partner display name"/><input id="partnerCode" placeholder="Optional linking code"/><label class="inline"><input id="partnerVisible" type="checkbox" checked/> Show this partner on dashboard</label><button id="addPartnerBtn" class="primary">Add partner profile</button><p class="muted">This creates a local partner profile. For real two-way syncing, connect a backend such as Cloudflare Workers + D1/R2.</p></article>
+        <div class="grid two">
+          <div class="card">
+            <h2>Linked partner moods</h2>
+            <div id="moodFeed" class="feed"></div>
+          </div>
+          <div class="card">
+            <h2>Shared notes</h2>
+            <div id="notesFeed" class="feed"></div>
+          </div>
         </div>
-        <article class="card"><h2>Linked partners</h2><div id="partnersList"></div></article>
-      </section>
-
-      <section id="questions" class="view">
-        <div class="cards two">
-          <article class="card"><h2>Conversation prompts</h2><p id="promptText"></p><button id="nextPrompt">Next prompt</button></article>
-          <article class="card"><h2>Compatibility quiz</h2><p id="quizText"></p><button id="nextQuiz">Next quiz</button></article>
+        <div class="card">
+          <h2>Interactive together board</h2>
+          <div class="quick-actions">
+            <button data-prompt="I miss you today.">Send: I miss you</button>
+            <button data-prompt="Pick a movie for us tonight?">Plan movie night</button>
+            <button data-prompt="Countdown to our next visit starts now.">Start visit countdown</button>
+          </div>
+          <div id="activityFeed" class="feed"></div>
         </div>
-        <article class="card"><h2>Saved answers</h2><div id="answersList"></div></article>
       </section>
 
-      <section id="albums" class="view">
-        <div class="cards two">
-          <article class="card"><h2>Create album</h2><input id="albumTitle" placeholder="Album title"/><select id="albumType"><option value="personal">Personal</option><option value="shared">Shared with selected partner</option></select><button id="createAlbumBtn">Create album</button></article>
-          <article class="card"><h2>Upload photos</h2><select id="albumSelect"></select><input id="photoUpload" type="file" accept="image/*" multiple/><button id="uploadPhotosBtn">Add photos</button><p class="muted">Photos are saved locally in this static version. Export backups from Settings.</p></article>
+      <section id="partners" class="tab-panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>Add a private partner card</h2>
+            <p class="muted">Private cards stay on your profile. Shared data only appears after both profiles are linked using a code.</p>
+            <label>Name<input id="partnerName" placeholder="Partner name" /></label>
+            <label>Notes<textarea id="partnerNotes" placeholder="What you want to remember"></textarea></label>
+            <button id="addPartnerBtn">Add private card</button>
+          </div>
+          <div class="card">
+            <h2>Profile linking</h2>
+            <p>Your link code:</p>
+            <code id="myLinkCode"></code>
+            <label>Partner link code<input id="partnerLinkCode" placeholder="Paste partner profile ID/link code" /></label>
+            <button id="linkPartnerBtn">Link profiles</button>
+          </div>
         </div>
-        <div id="albumsList" class="album-grid"></div>
+        <div class="card">
+          <h2>Your partner list</h2>
+          <div id="partnerList" class="cards-list"></div>
+        </div>
       </section>
 
-      <section id="calls" class="view">
-        <div class="card"><h2>Video / voice call</h2><p class="muted">Works over HTTPS. Static hosting cannot discover another phone automatically, so use the manual WebRTC offer/answer boxes or add a Cloudflare Worker signalling service later.</p><div class="call-controls"><button id="startVideoBtn" class="primary">Start camera + mic</button><button id="startVoiceBtn">Voice only</button><button id="recordBtn">Start recording</button><button id="stopRecordBtn" class="danger">Stop recording</button><button id="hangupBtn">Hang up</button></div><div class="video-grid"><video id="localVideo" autoplay muted playsinline></video><video id="remoteVideo" autoplay playsinline></video></div></div>
-        <div class="cards two"><article class="card"><h3>Manual WebRTC connection</h3><button id="createOfferBtn">Create offer</button><button id="createAnswerBtn">Create answer from pasted offer</button><button id="acceptAnswerBtn">Accept pasted answer</button><textarea id="signalBox" placeholder="Offer/answer text appears here. Copy it to the other person, or paste theirs here."></textarea></article><article class="card"><h3>Saved recordings</h3><div id="recordingsList"></div></article></div>
+      <section id="albums" class="tab-panel">
+        <div class="grid two">
+          <div class="card">
+            <h2>Create album</h2>
+            <label>Album name<input id="albumName" placeholder="e.g. December visit" /></label>
+            <label>Visibility<select id="albumVisibility"><option value="private">Private</option><option value="shared">Shared with linked partners</option></select></label>
+            <button id="createAlbumBtn">Create album</button>
+          </div>
+          <div class="card">
+            <h2>Upload photos</h2>
+            <label>Album<select id="albumSelect"></select></label>
+            <input id="photoInput" type="file" accept="image/*" multiple />
+            <button id="uploadPhotosBtn">Upload to album</button>
+          </div>
+        </div>
+        <div id="albumGrid" class="album-grid"></div>
       </section>
 
-      <section id="settings" class="view">
-        <div class="cards two"><article class="card"><h2>Security</h2><input id="newPin" type="password" inputmode="numeric" placeholder="Set fallback PIN"/><button id="savePinBtn">Save PIN</button><button id="registerPasskeyBtn">Register biometric / passkey</button><label class="inline"><input id="requireLock" type="checkbox" checked/> Require unlock every time app opens</label></article><article class="card"><h2>Backup</h2><button id="exportBtn">Export full backup</button><input id="importFile" type="file" accept="application/json"/><button id="resetBtn" class="danger">Reset app</button></article></div>
+      <section id="calls" class="tab-panel">
+        <div class="card">
+          <h2>Video / voice calls</h2>
+          <p class="muted">Works on HTTPS mobile browsers. Recording captures the local mixed stream where supported by the browser.</p>
+          <div class="call-controls">
+            <select id="callPartnerSelect"></select>
+            <button id="startCallBtn">Start call</button>
+            <button id="joinCallBtn">Join latest call</button>
+            <button id="recordCallBtn">Start recording</button>
+            <button id="hangupBtn" class="danger">Hang up</button>
+          </div>
+          <div class="video-grid">
+            <video id="localVideo" autoplay muted playsinline></video>
+            <video id="remoteVideo" autoplay playsinline></video>
+          </div>
+          <div id="recordingsList" class="feed"></div>
+        </div>
       </section>
-    </main>
-  </div>
 
-  <script src="./app.js"></script>
+      <section id="settings" class="tab-panel">
+        <div class="card">
+          <h2>Profile</h2>
+          <pre id="profilePreview"></pre>
+          <button id="exportBtn" class="secondary">Export backup JSON</button>
+          <button id="clearLocalBtn" class="danger">Clear this browser</button>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="app.js"></script>
 </body>
 </html>
