@@ -124,19 +124,6 @@ alter table signals replica identity full;
 alter table recordings replica identity full;
 alter table messages replica identity full;
 
-alter publication supabase_realtime add table profiles;
-alter publication supabase_realtime add table partners;
-alter publication supabase_realtime add table links;
-alter publication supabase_realtime add table moods;
-alter publication supabase_realtime add table notes;
-alter publication supabase_realtime add table activities;
-alter publication supabase_realtime add table albums;
-alter publication supabase_realtime add table photos;
-alter publication supabase_realtime add table calls;
-alter publication supabase_realtime add table signals;
-alter publication supabase_realtime add table recordings;
-alter publication supabase_realtime add table messages;
-
 insert into storage.buckets (id, name, public)
 values ('couples-media', 'couples-media', true)
 on conflict (id) do update set public = true;
