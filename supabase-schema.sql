@@ -209,3 +209,37 @@ values ('couples-media', 'couples-media', true, 524288000, array['image/*','vide
 on conflict (id) do update set public = true, file_size_limit = 524288000, allowed_mime_types = array['image/*','video/*','audio/*','application/octet-stream'];
 
 notify pgrst, 'reload schema';
+
+
+-- Link-request and media/location fix additions. Safe to rerun.
+create table if not exists link_requests (
+  id uuid primary key,
+  requester_id uuid not null references profiles(id) on delete cascade,
+  recipient_id uuid not null references profiles(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending','accepted','rejected','cancelled')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  accepted_at timestamptz
+);
+
+create unique index if not exists link_requests_one_pending_pair
+on link_requests (least(requester_id, recipient_id), greatest(requester_id, recipient_id))
+where status = 'pending';
+
+alter table link_requests replica identity full;
+alter table link_requests enable row level security;
+do $$ begin alter publication supabase_realtime add table link_requests; exception when duplicate_object then null; end $$;
+do $$ begin create policy "public all link_requests v16" on link_requests for all using (true) with check (true); exception when duplicate_object then null; end $$;
+
+-- Remove MIME restrictions that can reject mobile camera files, while retaining size limits.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('couples-media', 'couples-media', true, 524288000, null)
+on conflict (id) do update set public = true, file_size_limit = 524288000, allowed_mime_types = null;
+
+-- Extra permissive storage policies for the embedded anon-key prototype.
+do $$ begin create policy "couples media read v16" on storage.objects for select using (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
+do $$ begin create policy "couples media insert v16" on storage.objects for insert with check (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
+do $$ begin create policy "couples media update v16" on storage.objects for update using (bucket_id = 'couples-media') with check (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
+do $$ begin create policy "couples media delete v16" on storage.objects for delete using (bucket_id = 'couples-media'); exception when duplicate_object then null; end $$;
+
+notify pgrst, 'reload schema';
