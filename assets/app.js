@@ -1,9 +1,9 @@
-console.log('Couples Connect app version: link-requests-media-location-20260617-16');
+console.log('Couples Connect app version: no-calls-admin-unlink-20260617');
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
 const ADMIN_PROFILE_ID = '0a10a4c8-db73-4696-bf5d-58472c72304b';
-const CACHE_VERSION = 'link-requests-media-location-20260617-16';
+const CACHE_VERSION = 'no-calls-admin-unlink-20260617';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
@@ -91,10 +91,6 @@ function bindUI(){
   $$('.quick-actions button').forEach(b=>b.onclick=()=>postActivity(b.dataset.prompt));
   on('#sendMessageBtn','click',sendEncryptedMessage);
   on('#enableNotificationsBtn','click',enableNotifications);
-  on('#startCallBtn','click',startCall);
-  on('#joinCallBtn','click',joinLatestCall);
-  on('#recordCallBtn','click',toggleRecording);
-  on('#hangupBtn','click',hangup);
   on('#shareLocationOnceBtn','click',shareLocationOnce);
   on('#startLiveLocationBtn','click',startLiveLocation);
   on('#stopLiveLocationBtn','click',stopLiveLocation);
@@ -323,7 +319,7 @@ async function decryptText(cipher,iv,phrase){ const key=await keyFromPhrase(phra
 async function sendEncryptedMessage(){ const to=$('#messageTo').value, body=$('#messageBody').value.trim(), phrase=$('#messagePhrase').value; if(!to||!body||!phrase)return toast('Choose recipient, message and shared phrase.'); const enc=await encryptText(body,phrase); await dbInsert('messages',{id:uid(),from_id:APP.profile.id,to_id:to,cipher:enc.cipher,iv:enc.iv,created_at:now()}); $('#messageBody').value=''; await loadAll(); renderAll(); }
 async function renderMessages(){ const phrase=$('#messagePhrase').value; const mine=APP.messages.filter(m=>m.from_id===APP.profile.id||m.to_id===APP.profile.id).slice(0,30); const parts=[]; for(const m of mine){ let body='Encrypted message. Enter shared phrase to decrypt.'; if(phrase){ try{ body=await decryptText(m.cipher,m.iv,phrase); }catch{} } parts.push(`<div class="feed-item"><strong>${escapeHtml(nameOf(m.from_id))} → ${escapeHtml(nameOf(m.to_id))}</strong><br>${escapeHtml(body)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`); } $('#messagesFeed').innerHTML=parts.join('')||'<p class="muted">No messages yet.</p>'; }
 
-function renderAll(){ if(!APP.profile)return; $('#activeProfileText').textContent=`Signed in as ${APP.profile.name}`; $('#profilePreview').textContent=JSON.stringify({profileCode:APP.profile.id, name:APP.profile.name},null,2); fillProfileEdit(); renderFeeds(); renderProfiles(); renderAlbums(); renderSelectors(); renderMessages(); renderRecordingBanner(); renderLocations(); renderSettingsLinking(); renderLinkRequests(); applyAdminVisibility(); }
+function renderAll(){ if(!APP.profile)return; $('#activeProfileText').textContent=`Signed in as ${APP.profile.name}`; $('#profilePreview').textContent=JSON.stringify({profileCode:APP.profile.id, name:APP.profile.name},null,2); fillProfileEdit(); renderFeeds(); renderProfiles(); renderAlbums(); renderSelectors(); renderMessages(); renderLocations(); renderSettingsLinking(); renderLinkRequests(); renderPartnerManagement(); applyAdminVisibility(); }
 function fillProfileEdit(){ $('#editName').value=APP.profile.name||''; $('#editBasics').value=APP.profile.basics||''; $('#editPersonality').value=APP.profile.personality||''; $('#editNeeds').value=APP.profile.needs||''; $('#editLife').value=APP.profile.life||''; }
 function renderFeeds(){ const ids=visibleProfileIds(); $('#moodFeed').innerHTML=APP.moods.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${x.mood} ${escapeHtml(nameOf(x.profile_id))}</strong><br>${escapeHtml(x.note||'Checked in')}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No moods yet.</p>'; $('#notesFeed').innerHTML=APP.notes.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${escapeHtml(nameOf(x.profile_id))}</strong><br>${escapeHtml(x.body)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'; $('#activityFeed').innerHTML=APP.activities.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${escapeHtml(nameOf(x.profile_id))}</strong>: ${escapeHtml(x.body)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No activity yet.</p>'; }
 function renderProfiles(){ const ids=visibleProfileIds(); $('#publicProfiles').innerHTML=APP.profiles.filter(p=>ids.includes(p.id)).map(p=>`<div class="partner-card"><h3>${escapeHtml(p.name)}</h3><p><b>Basics:</b> ${escapeHtml(p.basics||'')}</p><p><b>Personality:</b> ${escapeHtml(p.personality||'')}</p><p><b>Needs:</b> ${escapeHtml(p.needs||'')}</p><p><b>Life:</b> ${escapeHtml(p.life||'')}</p></div>`).join(''); }
@@ -333,6 +329,41 @@ function renderSettingsLinking(){
   const linked=linkedIds().map(id=>`<div class="partner-card"><h3>${escapeHtml(nameOf(id))}</h3><small>${id}</small></div>`).join('');
   const list=$('#linkedProfilesList'); if(list) list.innerHTML=linked || '<p class="muted">No linked profiles yet.</p>';
 }
+
+function renderPartnerManagement(){
+  if(!APP.profile || !isAdmin()) return;
+  const privateList=$('#partnerList');
+  if(privateList){
+    const cards=APP.partners.filter(p=>p.owner_id===APP.profile.id).map(p=>`<div class="partner-card"><h3>${escapeHtml(p.name||'Partner')}</h3><p>${escapeHtml(p.notes||'')}</p><small>Private card</small></div>`).join('');
+    privateList.innerHTML=cards || '<p class="muted">No private partner cards yet.</p>';
+  }
+  const linkedList=$('#linkedProfilesAdminList');
+  if(linkedList){
+    const rows=APP.links.filter(l=>l.profile_a===APP.profile.id || l.profile_b===APP.profile.id);
+    linkedList.innerHTML=rows.map(l=>{
+      const otherId = l.profile_a===APP.profile.id ? l.profile_b : l.profile_a;
+      return `<div class="partner-card"><h3>${escapeHtml(nameOf(otherId))}</h3><p><small>${escapeHtml(otherId)}</small></p><button type="button" class="danger" onclick="removeLinkedPartner('${l.id}')">Remove linked partner</button></div>`;
+    }).join('') || '<p class="muted">No linked profiles yet.</p>';
+  }
+}
+
+async function removeLinkedPartner(linkId){
+  if(!isAdmin()) return toast('Only the app owner/admin can remove linked partners.');
+  const link=APP.links.find(l=>l.id===linkId);
+  if(!link) return toast('Linked profile not found.');
+  const otherId = link.profile_a===APP.profile.id ? link.profile_b : link.profile_a;
+  if(!confirm(`Remove the link with ${nameOf(otherId)}? This only removes the relationship link. It does not delete either profile.`)) return;
+  try{
+    await dbDelete('links', linkId);
+    await loadAll();
+    renderAll();
+    toast('Linked partner removed.');
+  }catch(e){
+    console.error(e);
+    toast('Could not remove linked partner: '+friendlySupabaseError(e));
+  }
+}
+
 function applyAdminVisibility(){
   const admin=isAdmin();
   const tab=$('[data-tab="partners"]');
@@ -427,21 +458,11 @@ async function moveMedia(mediaId, forcedAlbumId=null){
   }catch(e){ console.error(e); toast('Move failed: '+friendlySupabaseError(e)); }
 }
 
-function renderSelectors(){ const opts=linkedIds().map(id=>`<option value="${id}">${escapeHtml(nameOf(id))}</option>`).join(''); $('#callPartnerSelect').innerHTML=opts; $('#messageTo').innerHTML=opts; $('#recordingsList').innerHTML=APP.recordings.filter(r=>r.owner_id===APP.profile.id).map(r=>`<div class="feed-item"><a href="${r.url||r.data_url}" download="${escapeHtml(r.name)}">${escapeHtml(r.name)}</a><br><small>${new Date(r.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No recordings yet.</p>'; }
-async function getMedia(){ APP.localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true}); $('#localVideo').srcObject=APP.localStream; return APP.localStream; }
-function newPeer(){ const pc=new RTCPeerConnection({iceServers:TURN_ICE_SERVERS}); pc.ontrack=e=>{APP.remoteStream=e.streams[0]; $('#remoteVideo').srcObject=APP.remoteStream;}; pc.onicecandidate=e=>{ if(e.candidate&&APP.currentCallId) dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'ice',payload:e.candidate,created_at:now()}); }; return pc; }
-async function startCall(){ const to=$('#callPartnerSelect').value; if(!to)return toast('Link a profile first.'); await getMedia(); APP.peer=newPeer(); APP.localStream.getTracks().forEach(t=>APP.peer.addTrack(t,APP.localStream)); APP.currentCallId=uid(); await dbInsert('calls',{id:APP.currentCallId,from_id:APP.profile.id,to_id:to,status:'ringing',recording:false,created_at:now()}); const offer=await APP.peer.createOffer(); await APP.peer.setLocalDescription(offer); await dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'offer',payload:offer,created_at:now()}); listenSignals(); }
-async function joinLatestCall(){ const {data}=await APP.sb.from('calls').select('*').or(`to_id.eq.${APP.profile.id},from_id.eq.${APP.profile.id}`).order('created_at',{ascending:false}).limit(1); const call=data?.[0]; if(!call)return toast('No call found.'); APP.currentCallId=call.id; await getMedia(); APP.peer=newPeer(); APP.localStream.getTracks().forEach(t=>APP.peer.addTrack(t,APP.localStream)); listenSignals(); const {data:sigs}=await APP.sb.from('signals').select('*').eq('call_id',call.id).order('created_at',{ascending:true}); for(const s of sigs||[]) await handleSignal(s); }
-function listenSignals(){ const ch=APP.sb.channel('signals:'+APP.currentCallId).on('postgres_changes',{event:'INSERT',schema:'public',table:'signals',filter:`call_id=eq.${APP.currentCallId}`},e=>handleSignal(e.new)).subscribe(); APP.realtimeChannels.push(ch); }
-async function handleSignal(s){ if(!APP.peer||s.from_id===APP.profile.id)return; if(s.type==='offer'){ await APP.peer.setRemoteDescription(new RTCSessionDescription(s.payload)); const ans=await APP.peer.createAnswer(); await APP.peer.setLocalDescription(ans); await dbInsert('signals',{id:uid(),call_id:APP.currentCallId,from_id:APP.profile.id,type:'answer',payload:ans,created_at:now()}); } if(s.type==='answer') await APP.peer.setRemoteDescription(new RTCSessionDescription(s.payload)); if(s.type==='ice') try{await APP.peer.addIceCandidate(new RTCIceCandidate(s.payload));}catch{} }
-function mixedStream(){
-  const localVideo=$('#localVideo'); const remoteVideo=$('#remoteVideo'); const canvas=document.createElement('canvas'); canvas.width=1280; canvas.height=720; const ctx=canvas.getContext('2d'); let active=true;
-  function draw(){ if(!active) return; ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height); try{ if(remoteVideo?.srcObject) ctx.drawImage(remoteVideo,0,0,canvas.width,canvas.height); }catch{} try{ if(localVideo?.srcObject) ctx.drawImage(localVideo,canvas.width-340,canvas.height-250,320,240); }catch{} APP.recordingAnimation=requestAnimationFrame(draw); }
-  draw(); const out=canvas.captureStream ? canvas.captureStream(30) : new MediaStream();
-  try{ const AudioCtx=window.AudioContext || window.webkitAudioContext; const ac=new AudioCtx(); const dest=ac.createMediaStreamDestination(); [APP.localStream, APP.remoteStream].filter(Boolean).forEach(s=>{ if(s.getAudioTracks().length){ const src=ac.createMediaStreamSource(new MediaStream(s.getAudioTracks())); src.connect(dest); } }); dest.stream.getAudioTracks().forEach(t=>out.addTrack(t)); APP.recordingAudioContext=ac; }
-  catch(e){ console.warn('Audio mix failed; falling back to raw audio tracks.', e); [APP.localStream, APP.remoteStream].filter(Boolean).forEach(s=>s.getAudioTracks().forEach(t=>out.addTrack(t))); }
-  APP.recordingCanvas={canvas, stop:()=>{active=false; if(APP.recordingAnimation) cancelAnimationFrame(APP.recordingAnimation);}}; return out;
+function renderSelectors(){
+  const opts=linkedIds().map(id=>`<option value="${id}">${escapeHtml(nameOf(id))}</option>`).join('');
+  const msgTo=$('#messageTo'); if(msgTo) msgTo.innerHTML=opts;
 }
+
 function bestRecordingMime(){ const types=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']; return types.find(t=>window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || ''; }
 async function toggleRecording(){
   if(APP.recorder?.state==='recording'){ APP.recorder.stop(); $('#recordCallBtn').textContent='Start recording'; await setCallRecording(false); return; }
@@ -457,7 +478,7 @@ async function saveRecording(){
   let url=null, storage_path=null; try{ const up=await APP.sb.storage.from(MEDIA_BUCKET).upload(path,blob,{contentType:type,upsert:false}); if(up.error) throw up.error; storage_path=path; url=APP.sb.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl; }catch(e){ console.warn('Recording storage upload failed:', e); toast('Recording could not be uploaded to Supabase Storage: '+friendlySupabaseError(e)); }
   if(url) await dbInsert('recordings',{id:uid(),owner_id:APP.profile.id,call_id:APP.currentCallId,name,storage_path,url,created_at:now()}); await loadAll(); renderAll();
 }
-function hangup(){ APP.recorder?.state==='recording'&&APP.recorder.stop(); try{APP.recordingCanvas?.stop?.(); APP.recordingAudioContext?.close?.();}catch{} APP.peer?.close(); APP.localStream?.getTracks().forEach(t=>t.stop()); APP.peer=null; APP.localStream=null; APP.remoteStream=null; $('#localVideo').srcObject=null; $('#remoteVideo').srcObject=null; setCallRecording(false).catch(()=>{}); }
+function hangup(){ APP.recorder?.state==='recording'&&APP.recorder.stop(); try{APP.recordingCanvas?.stop?.(); APP.recordingAudioContext?.close?.();}catch{} APP.peer?.close(); APP.localStream?.getTracks().forEach(t=>t.stop()); APP.peer=null; APP.localStream=null; APP.remoteStream=null; const lv=$('#localVideo'); const rv=$('#remoteVideo'); if(lv) lv.srcObject=null; if(rv) rv.srcObject=null; setCallRecording(false).catch(()=>{}); }
 
 async function getCurrentPosition(){
   if(!navigator.geolocation) throw new Error('Geolocation is not supported on this browser.');
@@ -513,4 +534,4 @@ function formatBytes(bytes){ if(!bytes) return ''; const units=['B','KB','MB','G
 function escapeHtml(s=''){ return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 
 
-Object.assign(window,{createProfile,loginProfile,loadProfile,createAlbum,uploadMedia,shareLocationOnce,startLiveLocation,stopLiveLocation,openGallery,closeGallery,galleryNext,galleryPrev,sendLinkRequest,acceptLinkRequest,rejectLinkRequest});
+Object.assign(window,{createProfile,loginProfile,loadProfile,createAlbum,uploadMedia,shareLocationOnce,startLiveLocation,stopLiveLocation,openGallery,closeGallery,galleryNext,galleryPrev,sendLinkRequest,acceptLinkRequest,rejectLinkRequest,removeLinkedPartner});

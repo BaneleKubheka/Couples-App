@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=link-requests-media-location-20260617-16" />
+  <link rel="stylesheet" href="styles.css?v=no-calls-admin-unlink-20260617" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -20,7 +20,7 @@
 
   <main class="app-shell">
     <section id="authScreen" class="screen active">
-      <div class="card hero-card"><h1>Couples Connect</h1><p>Private profiles, linked partners, moods, notes, albums, calls, recordings and encrypted messages.</p></div>
+      <div class="card hero-card"><h1>Couples Connect</h1><p>Private profiles, linked partners, moods, notes, albums, locations and encrypted messages.</p></div>
       <div class="grid two">
         <div class="card">
           <h2>Create profile</h2>
@@ -51,7 +51,6 @@
         <button class="tab admin-only" data-tab="partners">Partner Management</button>
         <button class="tab" data-tab="albums">Albums</button>
         <button class="tab" data-tab="messages">Messages</button>
-        <button class="tab" data-tab="calls">Calls</button>
         <button class="tab" data-tab="location">Location</button>
         <button class="tab" data-tab="settings">Settings</button>
       </nav>
@@ -79,7 +78,8 @@
 
       <section id="partners" class="tab-panel admin-only-panel">
         <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Admin direct profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Admin link profiles</button></div></div>
-        <div class="card"><h2>Your partners</h2><div id="partnerList" class="cards-list"></div></div>
+        <div class="card"><h2>Linked profiles</h2><p class="muted">As admin, you can remove a profile link. This does not delete the user profile or their cloud data; it only removes the relationship link.</p><div id="linkedProfilesAdminList" class="cards-list"></div></div>
+        <div class="card"><h2>Your private partner cards</h2><div id="partnerList" class="cards-list"></div></div>
       </section>
 
       <section id="albums" class="tab-panel">
@@ -89,10 +89,6 @@
 
       <section id="messages" class="tab-panel">
         <div class="grid two"><div class="card"><h2>Encrypted messages</h2><p class="muted">Messages are encrypted in the browser using your shared phrase before being saved to Supabase.</p><label>Shared encryption phrase<input id="messagePhrase" type="password" placeholder="Both profiles must use the same phrase" /></label><label>Send to<select id="messageTo"></select></label><textarea id="messageBody" placeholder="Write private message"></textarea><button id="sendMessageBtn">Encrypt and send</button></div><div class="card"><h2>Inbox</h2><div id="messagesFeed" class="feed"></div></div></div>
-      </section>
-
-      <section id="calls" class="tab-panel">
-        <div class="card"><h2>Video / voice calls</h2><p class="muted">Uses WebRTC, Supabase signalling, recording consent and visible recording status. TURN support is wired in; add real TURN credentials in app.js if required.</p><div id="recordingBanner" class="recording-banner hidden">● Recording in progress</div><div class="call-controls"><select id="callPartnerSelect"></select><button id="startCallBtn">Start call</button><button id="joinCallBtn">Join latest call</button><button id="recordCallBtn">Start recording</button><button id="hangupBtn" class="danger">Hang up</button></div><div class="video-grid"><video id="localVideo" autoplay muted playsinline></video><video id="remoteVideo" autoplay playsinline></video></div><div id="recordingsList" class="feed"></div></div>
       </section>
 
 
@@ -141,6 +137,6 @@
     <div id="galleryMeta" class="gallery-meta"></div>
   </div>
 
-  <script src="app-v16.js?v=link-requests-media-location-20260617-16"></script>
+  <script src="app.js?v=no-calls-admin-unlink-20260617"></script>
 </body>
 </html>
