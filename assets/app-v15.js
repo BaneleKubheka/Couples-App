@@ -1,9 +1,8 @@
-console.log('Couples Connect app version: admin-location-consent-20260617-16');
+console.log('Couples Connect app version: cache-bypass-signin-20260617-15');
 const SUPABASE_URL = 'https://cmdylttzutpbaovxcfll.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_LPi4xeUUk-InGxknaiqJkw_mn4BvnNc';
 const MEDIA_BUCKET = 'couples-media';
-const ADMIN_PROFILE_ID = '0a10a4c8-db73-4696-bf5d-58472c72304b';
-const CACHE_VERSION = 'admin-location-consent-20260617-16';
+const CACHE_VERSION = 'gallery-location-20260617-11-syntax-signinfix';
 const TURN_ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' }
   // Add TURN when available:
@@ -186,7 +185,7 @@ async function loadProfile(id,passcodeHash=null,showErrors=false){
     }
     if(!p){ if(showErrors) setAuthStatus('Profile not found. Check the profile code.'); return show('authScreen'); }
     if(p.passcode_hash && passcodeHash && p.passcode_hash!==passcodeHash){ if(showErrors) setAuthStatus('Incorrect recovery passcode.'); return show('authScreen'); }
-    APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcodeHash||p.passcode_hash,remember:true,lastSignedIn:now()}); setAuthStatus(''); show('appScreen'); renderAll(); maybeResumeConsentedLiveLocation();
+    APP.profile=p; saveLS('cc_active_profile',{id:p.id,passcodeHash:passcodeHash||p.passcode_hash}); setAuthStatus(''); show('appScreen'); renderAll();
   } catch(e){
     console.error('Profile load failed:', e);
     if(showErrors) setAuthStatus('Sign in failed: '+friendlySupabaseError(e));
@@ -196,29 +195,12 @@ async function loadProfile(id,passcodeHash=null,showErrors=false){
 
 function linkedIds(){ return APP.links.filter(l=>l.profile_a===APP.profile?.id||l.profile_b===APP.profile?.id).map(l=>l.profile_a===APP.profile.id?l.profile_b:l.profile_a); }
 function visibleProfileIds(){ return [APP.profile?.id,...linkedIds()].filter(Boolean); }
-function isAdmin(){ return APP.profile?.id === ADMIN_PROFILE_ID; }
-function locationVisibleProfileIds(){ return isAdmin() ? APP.profiles.map(p=>p.id) : visibleProfileIds(); }
-function applyAdminVisibility(){
-  const partnerTab = document.querySelector('.tab[data-tab="partners"]');
-  const partnerPanel = document.getElementById('partners');
-  const adminLocationPanel = document.getElementById('adminLocationPanel');
-  const admin = isAdmin();
-  if(partnerTab) partnerTab.classList.toggle('hidden', !admin);
-  if(partnerPanel) partnerPanel.classList.toggle('admin-hidden', !admin);
-  if(adminLocationPanel) adminLocationPanel.classList.toggle('hidden', !admin);
-  const activePartner = partnerPanel?.classList.contains('active');
-  if(!admin && activePartner){
-    document.querySelectorAll('.tab,.tab-panel').forEach(x=>x.classList.remove('active'));
-    document.querySelector('.tab[data-tab="dashboard"]')?.classList.add('active');
-    document.getElementById('dashboard')?.classList.add('active');
-  }
-}
 function nameOf(id){ return APP.profiles.find(p=>p.id===id)?.name || (id===APP.profile?.id?APP.profile.name:'Linked profile'); }
 
 async function copyProfileCode(){ await navigator.clipboard?.writeText(APP.profile.id); toast('Profile code copied.'); }
 async function saveProfileEdits(){ Object.assign(APP.profile,{name:$('#editName').value,basics:$('#editBasics').value,personality:$('#editPersonality').value,needs:$('#editNeeds').value,life:$('#editLife').value,updated_at:now()}); await dbUpsert('profiles',APP.profile); await loadAll(); renderAll(); toast('Public profile saved.'); }
 async function addPartner(){ const name=$('#partnerName')?.value.trim(); if(!name)return; await dbInsert('partners',{id:uid(),owner_id:APP.profile.id,name,notes:$('#partnerNotes').value,created_at:now()}); $('#partnerName').value=''; $('#partnerNotes').value=''; await loadAll(); renderAll(); }
-async function linkPartner(){ if(!isAdmin()) return toast('Profile linking is available only to the app owner/admin.'); const code=$('#partnerLinkCode').value.trim(); if(!code||code===APP.profile.id)return toast('Paste another profile code.'); if(!APP.profiles.find(p=>p.id===code)) return toast('Profile not found. Ask your partner to create a profile first.'); const exists=APP.links.some(l=>(l.profile_a===APP.profile.id&&l.profile_b===code)||(l.profile_a===code&&l.profile_b===APP.profile.id)); if(exists)return toast('Already linked.'); await dbInsert('links',{id:uid(),profile_a:APP.profile.id,profile_b:code,created_at:now()}); $('#partnerLinkCode').value=''; await loadAll(); renderAll(); toast('Profiles linked.'); }
+async function linkPartner(){ const code=$('#partnerLinkCode').value.trim(); if(!code||code===APP.profile.id)return toast('Paste another profile code.'); if(!APP.profiles.find(p=>p.id===code)) return toast('Profile not found. Ask your partner to create a profile first.'); const exists=APP.links.some(l=>(l.profile_a===APP.profile.id&&l.profile_b===code)||(l.profile_a===code&&l.profile_b===APP.profile.id)); if(exists)return toast('Already linked.'); await dbInsert('links',{id:uid(),profile_a:APP.profile.id,profile_b:code,created_at:now()}); $('#partnerLinkCode').value=''; await loadAll(); renderAll(); toast('Profiles linked.'); }
 async function saveMood(){ await dbInsert('moods',{id:uid(),profile_id:APP.profile.id,mood:APP.selectedMood,note:$('#moodNote').value,created_at:now()}); $('#moodNote').value=''; await loadAll(); renderAll(); }
 async function saveNote(){ const body=$('#publicNote').value.trim(); if(!body)return; await dbInsert('notes',{id:uid(),profile_id:APP.profile.id,body,created_at:now()}); $('#publicNote').value=''; await loadAll(); renderAll(); }
 async function postActivity(body){ await dbInsert('activities',{id:uid(),profile_id:APP.profile.id,body,created_at:now()}); await loadAll(); renderAll(); }
@@ -278,7 +260,7 @@ async function decryptText(cipher,iv,phrase){ const key=await keyFromPhrase(phra
 async function sendEncryptedMessage(){ const to=$('#messageTo').value, body=$('#messageBody').value.trim(), phrase=$('#messagePhrase').value; if(!to||!body||!phrase)return toast('Choose recipient, message and shared phrase.'); const enc=await encryptText(body,phrase); await dbInsert('messages',{id:uid(),from_id:APP.profile.id,to_id:to,cipher:enc.cipher,iv:enc.iv,created_at:now()}); $('#messageBody').value=''; await loadAll(); renderAll(); }
 async function renderMessages(){ const phrase=$('#messagePhrase').value; const mine=APP.messages.filter(m=>m.from_id===APP.profile.id||m.to_id===APP.profile.id).slice(0,30); const parts=[]; for(const m of mine){ let body='Encrypted message. Enter shared phrase to decrypt.'; if(phrase){ try{ body=await decryptText(m.cipher,m.iv,phrase); }catch{} } parts.push(`<div class="feed-item"><strong>${escapeHtml(nameOf(m.from_id))} → ${escapeHtml(nameOf(m.to_id))}</strong><br>${escapeHtml(body)}<br><small>${new Date(m.created_at).toLocaleString()}</small></div>`); } $('#messagesFeed').innerHTML=parts.join('')||'<p class="muted">No messages yet.</p>'; }
 
-function renderAll(){ if(!APP.profile)return; $('#activeProfileText').textContent=`Signed in as ${APP.profile.name}`; $('#profilePreview').textContent=JSON.stringify({profileCode:APP.profile.id, name:APP.profile.name},null,2); fillProfileEdit(); renderFeeds(); renderProfiles(); renderAlbums(); renderSelectors(); renderMessages(); renderRecordingBanner(); renderLocations(); renderSettingsLinking(); applyAdminVisibility(); }
+function renderAll(){ if(!APP.profile)return; $('#activeProfileText').textContent=`Signed in as ${APP.profile.name}`; $('#profilePreview').textContent=JSON.stringify({profileCode:APP.profile.id, name:APP.profile.name},null,2); fillProfileEdit(); renderFeeds(); renderProfiles(); renderAlbums(); renderSelectors(); renderMessages(); renderRecordingBanner(); renderLocations(); renderSettingsLinking(); }
 function fillProfileEdit(){ $('#editName').value=APP.profile.name||''; $('#editBasics').value=APP.profile.basics||''; $('#editPersonality').value=APP.profile.personality||''; $('#editNeeds').value=APP.profile.needs||''; $('#editLife').value=APP.profile.life||''; }
 function renderFeeds(){ const ids=visibleProfileIds(); $('#moodFeed').innerHTML=APP.moods.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${x.mood} ${escapeHtml(nameOf(x.profile_id))}</strong><br>${escapeHtml(x.note||'Checked in')}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No moods yet.</p>'; $('#notesFeed').innerHTML=APP.notes.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${escapeHtml(nameOf(x.profile_id))}</strong><br>${escapeHtml(x.body)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No notes yet.</p>'; $('#activityFeed').innerHTML=APP.activities.filter(x=>ids.includes(x.profile_id)).slice(0,12).map(x=>`<div class="feed-item"><strong>${escapeHtml(nameOf(x.profile_id))}</strong>: ${escapeHtml(x.body)}<br><small>${new Date(x.created_at).toLocaleString()}</small></div>`).join('')||'<p class="muted">No activity yet.</p>'; }
 function renderProfiles(){ const ids=visibleProfileIds(); $('#publicProfiles').innerHTML=APP.profiles.filter(p=>ids.includes(p.id)).map(p=>`<div class="partner-card"><h3>${escapeHtml(p.name)}</h3><p><b>Basics:</b> ${escapeHtml(p.basics||'')}</p><p><b>Personality:</b> ${escapeHtml(p.personality||'')}</p><p><b>Needs:</b> ${escapeHtml(p.needs||'')}</p><p><b>Life:</b> ${escapeHtml(p.life||'')}</p></div>`).join(''); }
@@ -413,49 +395,30 @@ async function saveLocation(position, mode){
 }
 async function shareLocationOnce(){
   setLocationStatus('Requesting location permission...');
-  try{ const pos=await getCurrentPosition(); await saveLocation(pos,'snapshot'); setLocationStatus('Current location shared once and stored for linked profiles.'); }
+  try{ const pos=await getCurrentPosition(); await saveLocation(pos,'snapshot'); setLocationStatus('Current location shared once.'); }
   catch(e){ console.error(e); setLocationStatus('Location share failed: '+(e.message||e)); }
 }
 async function startLiveLocation(){
   if(!navigator.geolocation) return setLocationStatus('Geolocation is not supported on this browser.');
   if(APP.liveLocationWatchId!==null) return setLocationStatus('Live location sharing is already running.');
-  if(!confirm('Start live location sharing? Your linked profile can view updates while this app is open. You can stop sharing at any time.')) return;
-  saveLS('cc_live_location_consent_'+APP.profile.id,{enabled:true,granted_at:now()});
   setLocationStatus('Live location sharing started. Keep the app open for continuous updates.');
   APP.liveLocationWatchId=navigator.geolocation.watchPosition(async pos=>{
     try{ await saveLocation(pos,'live'); setLocationStatus('Live location updated at '+new Date().toLocaleTimeString()); }
     catch(e){ setLocationStatus('Live location update failed: '+friendlySupabaseError(e)); }
   }, err=>setLocationStatus('Live location error: '+err.message), {enableHighAccuracy:true,maximumAge:10000,timeout:20000});
 }
-function maybeResumeConsentedLiveLocation(){
-  const consent=getLS('cc_live_location_consent_'+APP.profile?.id);
-  if(consent?.enabled){
-    setTimeout(()=>setLocationStatus('Live location is not resumed silently. Tap Start live location to resume sharing for this browser session.'), 500);
-  }
-}
 function stopLiveLocation(){
   if(APP.liveLocationWatchId!==null && navigator.geolocation) navigator.geolocation.clearWatch(APP.liveLocationWatchId);
-  APP.liveLocationWatchId=null;
-  if(APP.profile) saveLS('cc_live_location_consent_'+APP.profile.id,{enabled:false,stopped_at:now()});
-  setLocationStatus('Live location sharing stopped.');
+  APP.liveLocationWatchId=null; setLocationStatus('Live location sharing stopped.');
 }
 function renderLocations(){
-  const ids=locationVisibleProfileIds();
+  const ids=visibleProfileIds();
   const feed=$('#locationFeed'); if(!feed) return;
-  const rows=APP.location_shares.filter(x=>ids.includes(x.profile_id)).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,50);
+  const rows=APP.location_shares.filter(x=>ids.includes(x.profile_id)).slice(0,25);
   feed.innerHTML=rows.map(l=>{
     const maps=`https://www.google.com/maps?q=${l.latitude},${l.longitude}`;
-    return `<div class="feed-item"><strong>${escapeHtml(nameOf(l.profile_id))}</strong> <span class="pill">${escapeHtml(l.share_mode||'snapshot')}</span>${isAdmin()?` <span class="pill">admin view</span>`:''}<br>${Number(l.latitude).toFixed(6)}, ${Number(l.longitude).toFixed(6)} ${l.accuracy?`±${Math.round(l.accuracy)}m`:''}<br><a href="${maps}" target="_blank" rel="noopener">Open in Google Maps</a><br><small>${new Date(l.created_at).toLocaleString()}</small></div>`;
+    return `<div class="feed-item"><strong>${escapeHtml(nameOf(l.profile_id))}</strong> <span class="pill">${escapeHtml(l.share_mode||'snapshot')}</span><br>${Number(l.latitude).toFixed(6)}, ${Number(l.longitude).toFixed(6)} ${l.accuracy?`±${Math.round(l.accuracy)}m`:''}<br><a href="${maps}" target="_blank" rel="noopener">Open in Google Maps</a><br><small>${new Date(l.created_at).toLocaleString()}</small></div>`;
   }).join('') || '<p class="muted">No shared locations yet.</p>';
-  const adminFeed=$('#adminLocationFeed');
-  if(adminFeed && isAdmin()){
-    const latestByUser=new Map();
-    for(const l of rows){ if(!latestByUser.has(l.profile_id)) latestByUser.set(l.profile_id,l); }
-    adminFeed.innerHTML=[...latestByUser.values()].map(l=>{
-      const maps=`https://www.google.com/maps?q=${l.latitude},${l.longitude}`;
-      return `<div class="feed-item"><strong>${escapeHtml(nameOf(l.profile_id))}</strong><br>Latest: ${Number(l.latitude).toFixed(6)}, ${Number(l.longitude).toFixed(6)}<br><a href="${maps}" target="_blank" rel="noopener">Open latest location</a><br><small>${new Date(l.created_at).toLocaleString()}</small></div>`;
-    }).join('') || '<p class="muted">No stored locations yet.</p>';
-  }
 }
 
 async function enableNotifications(){ if(!('Notification' in window)) return toast('Notifications are not supported on this browser.'); const p=await Notification.requestPermission(); toast(p==='granted'?'Notifications enabled while app is open.':'Notifications not enabled.'); }

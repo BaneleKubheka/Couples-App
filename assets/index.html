@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Couples Connect" />
   <title>Couples Connect</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=admin-location-consent-20260617-16" />
+  <link rel="stylesheet" href="styles.css?v=link-requests-media-location-20260617-16" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -48,7 +48,7 @@
       <nav class="tabs">
         <button class="tab active" data-tab="dashboard">Dashboard</button>
         <button class="tab" data-tab="profile">Public Profile</button>
-        <button class="tab" data-tab="partners" id="partnersTab">Partners</button>
+        <button class="tab admin-only" data-tab="partners">Partner Management</button>
         <button class="tab" data-tab="albums">Albums</button>
         <button class="tab" data-tab="messages">Messages</button>
         <button class="tab" data-tab="calls">Calls</button>
@@ -77,8 +77,8 @@
         <div class="card"><h2>Linked public profiles</h2><div id="publicProfiles" class="cards-list"></div></div>
       </section>
 
-      <section id="partners" class="tab-panel"><div class="card admin-note"><strong>Admin-only:</strong> this partner management area is visible only to the app owner/admin.</div>
-        <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Link profiles</button></div></div>
+      <section id="partners" class="tab-panel admin-only-panel">
+        <div class="grid two"><div class="card"><h2>Add private partner card</h2><label>Name<input id="partnerName" /></label><label>Notes<textarea id="partnerNotes"></textarea></label><button id="addPartnerBtn">Add private card</button></div><div class="card"><h2>Admin direct profile linking</h2><p>Your profile code:</p><code id="myLinkCode"></code><label>Partner profile code<input id="partnerLinkCode" /></label><button id="linkPartnerBtn">Admin link profiles</button></div></div>
         <div class="card"><h2>Your partners</h2><div id="partnerList" class="cards-list"></div></div>
       </section>
 
@@ -109,18 +109,21 @@
           </div>
           <div class="card location-map-card">
             <h2>Shared locations</h2>
-            <p class="muted">Locations appear here only after a user shares a one-time location or starts live sharing in their browser.</p>
             <div id="locationFeed" class="feed"></div>
-          </div>
-          <div class="card hidden" id="adminLocationPanel">
-            <h2>Admin stored locations</h2>
-            <p class="muted">Admin view of latest locations that users have explicitly shared and stored in Supabase.</p>
-            <div id="adminLocationFeed" class="feed"></div>
           </div>
         </div>
       </section>
 
       <section id="settings" class="tab-panel">
+        <div class="card">
+          <h2>Partner link request</h2>
+          <p class="muted">Any user can send a link request using another profile code. The other profile must accept before shared content appears. Regular users can only see and interact with their accepted linked profile.</p>
+          <p>Your profile code:</p><code id="requestMyCode"></code>
+          <label>Partner profile code<input id="requestPartnerCode" placeholder="Paste partner profile code" /></label>
+          <button id="sendLinkRequestBtn" type="button">Send link request</button>
+          <p id="linkRequestStatus" class="status-line"></p>
+          <div id="linkRequestsPanel" class="feed"></div>
+        </div>
         <div class="card"><h2>Settings</h2><button id="enableNotificationsBtn">Enable notifications</button><button id="exportBtn" class="secondary">Export local backup JSON</button><button id="clearLocalBtn" class="danger">Clear this browser only</button><pre id="profilePreview"></pre></div>
       </section>
     </section>
@@ -138,6 +141,6 @@
     <div id="galleryMeta" class="gallery-meta"></div>
   </div>
 
-  <script src="app.js?v=admin-location-consent-20260617-16"></script>
+  <script src="app-v16.js?v=link-requests-media-location-20260617-16"></script>
 </body>
 </html>
