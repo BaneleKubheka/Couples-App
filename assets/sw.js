@@ -1,5 +1,5 @@
-const CACHE='couples-connect-media-admin-v17';
-const ASSETS=['./','./index.html','./styles.css','./app.js','./app-v17.js','./manifest.json','./icon.png'];
+const CACHE='couples-connect-callhub18-media-admin-v17';
+const ASSETS=['./','./index.html','./styles.css','./app.js','./app-v18.js','./app-v17.js','./manifest.json','./icon.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
