@@ -1,9 +1,14 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "couples-app",
-  "main": "worker.js",
   "compatibility_date": "2026-06-17",
+  "observability": {
+    "enabled": true
+  },
   "assets": {
-    "directory": "./assets",
-    "binding": "ASSETS"
-  }
+    "directory": "assets"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
 }
